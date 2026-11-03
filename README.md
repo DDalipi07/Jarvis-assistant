@@ -14,7 +14,7 @@ Bring your own AI: it works with a **Claude (Anthropic)** or **OpenAI** API key,
 | 🗣️ **Voice** | Talk with the 🎤 button; Jarvis answers out loud with a British voice you can pick. |
 | 🧠 **AI chat with web search** | Ask anything. Live answers for news, stocks and weather, with sources. |
 | 📰 **Automatic briefing** | At 7:30 and 18:30: your stocks plus news on the topics you choose. |
-| ⏰ **Alarms, reminders, timers** | Set them by typing, talking or gesturing. |
+| ⏰ **Alarms, reminders, timers** | Set them by typing, talking or gesturing. Wake up to beeps, your own audio file, or any Spotify song. |
 | 🎓 **School** | Reads Google Classroom and school emails from Gmail, lists deadlines and reminds you the evening before and on the day. |
 | 🎵 **Spotify** | Album cover pop-up for the current song; skip, pause or play by gesture or voice. |
 | 🔊 **Volume** | Change your computer's volume with a pinch gesture or by asking. |

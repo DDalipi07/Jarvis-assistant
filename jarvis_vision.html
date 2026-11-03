@@ -321,6 +321,22 @@ form.ask input{flex:1}
           <input type="text" id="pStocks" placeholder="e.g. NVDA, AAPL, TSLA, SPY" autocomplete="off">
           <label class="lbl" for="pTopics">News topics</label>
           <input type="text" id="pTopics" placeholder="e.g. Portugal, USA, World, Tech & markets" autocomplete="off">
+          <label class="lbl" for="alarmSound">Alarm sound</label>
+          <select id="alarmSound">
+            <option value="beep">Jarvis beeps (default)</option>
+            <option value="file">A song or sound file from my computer</option>
+            <option value="spotify">A song on Spotify</option>
+          </select>
+          <div id="alarmFileRow" hidden style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <input type="file" id="alarmFile" accept="audio/*" aria-label="Alarm sound file" style="flex:1;min-width:0">
+            <span id="alarmFileName" style="font:12px var(--f-mono);color:var(--muted)"></span>
+          </div>
+          <input type="text" id="alarmSpotify" placeholder="Paste a Spotify song link (Share → Copy song link)" aria-label="Spotify song link" autocomplete="off" hidden>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn ghost" id="alarmTest" type="button">Test alarm sound</button>
+            <button class="btn ghost" id="alarmStop" type="button" hidden>Stop</button>
+          </div>
+          <p id="alarmMsg"></p>
           <button class="btn ghost" id="saveProfile" type="button" style="align-self:flex-start">Save preferences</button>
           <p>Keys and preferences never leave this computer, except when sent to the AI provider you chose.</p>
         </div>
@@ -426,16 +442,16 @@ function fire(i) {
   const sn = document.createElement("button"); sn.className = "btn ghost"; sn.type = "button"; sn.textContent = "Snooze 5 min"; sn.onclick = () => snooze();
   const ok = document.createElement("button"); ok.className = "btn"; ok.type = "button"; ok.textContent = "Dismiss"; ok.onclick = () => stopRinging(true);
   el.append(sn, ok); $("alerts").prepend(el);
-  beep(4);
-  const timer = setInterval(() => beep(3), 3500);
-  ringing = { item: i, el, timer };
-  speak(`${label.toLowerCase()}. ${i.title}`);
+  const loud = i.kind !== "reminder";
+  ringing = { item: i, el, timer: null };
+  if (loud) startAlarmSound(ringing); else { beep(2); speak(`${label.toLowerCase()}. ${i.title}`); }
+  if (loud) setTimeout(() => { if (ringing && ringing.item === i && alarmMode() === "beep") speak(`${label.toLowerCase()}. ${i.title}`); }, 400);
   log(i.title, label);
   render();
 }
 function stopRinging(announce) {
   if (!ringing) return;
-  clearInterval(ringing.timer); ringing.el.remove();
+  clearInterval(ringing.timer); stopAlarmSound(ringing); ringing.el.remove();
   if (announce) { speak("Dismissed."); log("Alert dismissed"); }
   ringing = null;
 }
@@ -445,6 +461,68 @@ function snooze() {
   addItem(it.kind, it.title, Date.now() + 5 * 60e3);
   speak("Snoozed for five minutes."); log(`Snoozed "${it.title}" 5 min`);
 }
+/* ---------- alarm sound: beeps, your own audio file, or a Spotify song ---------- */
+const alarmMode = () => { try { return localStorage.getItem("jarvis-alarm-mode") || "beep"; } catch { return "beep"; } };
+const alarmSpotifyUri = () => { try { return localStorage.getItem("jarvis-alarm-spotify") || ""; } catch { return ""; } };
+function idb() {
+  return new Promise((res, rej) => { const r = indexedDB.open("jarvis", 1); r.onupgradeneeded = () => r.result.createObjectStore("files"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+}
+async function idbPut(key, val) { const db = await idb(); return new Promise((res, rej) => { const tx = db.transaction("files", "readwrite"); tx.objectStore("files").put(val, key); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); }
+async function idbGet(key) { const db = await idb(); return new Promise((res, rej) => { const q = db.transaction("files").objectStore("files").get(key); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); }
+function beepLoop(r) { beep(4); r.timer = setInterval(() => beep(3), 3500); }
+async function startAlarmSound(r) {
+  const mode = alarmMode();
+  try {
+    if (mode === "file") {
+      const f = await idbGet("alarm-sound");
+      if (!f) throw new Error("no file");
+      const url = URL.createObjectURL(f.blob || f);
+      const a = new Audio(url); a.loop = true; a.volume = 1;
+      await a.play();
+      r.audio = a; r.audioUrl = url; return;
+    }
+    if (mode === "spotify") {
+      const uri = alarmSpotifyUri();
+      if (!uri || !spTok) throw new Error("spotify not ready");
+      const res = await spFetch("/me/player/play", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uris: [uri] }) });
+      if (!res.ok && res.status !== 204) throw new Error("spotify " + res.status);
+      r.spotify = true; return;
+    }
+  } catch (e) {
+    log(mode === "spotify" ? "Couldn't start the Spotify alarm (open Spotify on a device). Using beeps." : "Couldn't play your alarm file. Using beeps.", "ALARM");
+  }
+  beepLoop(r);
+}
+function stopAlarmSound(r) {
+  if (r.audio) { r.audio.pause(); URL.revokeObjectURL(r.audioUrl); r.audio = null; }
+  if (r.spotify) { r.spotify = false; spControl("pause"); }
+}
+function showAlarmRows() {
+  const m = $("alarmSound").value;
+  $("alarmFileRow").hidden = m !== "file"; $("alarmSpotify").hidden = m !== "spotify";
+  $("alarmMsg").textContent = m === "spotify" ? (spTok ? "Spotify must be open on one of your devices when the alarm rings." : "Connect Spotify in the Now playing panel first.") : "";
+}
+$("alarmSound").value = alarmMode();
+$("alarmSpotify").value = alarmSpotifyUri() ? "https://open.spotify.com/track/" + alarmSpotifyUri().split(":").pop() : "";
+idbGet("alarm-sound").then(f => { if (f && f.name) $("alarmFileName").textContent = "Current: " + f.name; }).catch(() => {});
+setTimeout(showAlarmRows, 0); // after the Spotify section below has loaded
+$("alarmSound").addEventListener("change", e => { try { localStorage.setItem("jarvis-alarm-mode", e.target.value); } catch {} showAlarmRows(); });
+$("alarmFile").addEventListener("change", async e => {
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  if (f.size > 25 * 1024 * 1024) { $("alarmMsg").textContent = "That file is over 25 MB. Pick a shorter song or clip."; return; }
+  try { await idbPut("alarm-sound", { blob: f, name: f.name }); $("alarmFileName").textContent = "Current: " + f.name; $("alarmMsg").textContent = "Alarm sound saved."; }
+  catch { $("alarmMsg").textContent = "Couldn't save that file in this browser."; }
+});
+$("alarmSpotify").addEventListener("change", e => {
+  const m = /track[/:]([A-Za-z0-9]{22})/.exec(e.target.value.trim());
+  if (!m) { $("alarmMsg").textContent = "That isn't a Spotify song link. In Spotify, click ⋯ → Share → Copy song link."; return; }
+  try { localStorage.setItem("jarvis-alarm-spotify", "spotify:track:" + m[1]); } catch {}
+  $("alarmMsg").textContent = "Spotify alarm song saved.";
+});
+let testRing = null;
+$("alarmTest").addEventListener("click", async () => { armAudio(); if (testRing) stopAlarmSound(testRing); clearInterval(testRing && testRing.timer); testRing = {}; await startAlarmSound(testRing); $("alarmStop").hidden = false; });
+$("alarmStop").addEventListener("click", () => { if (testRing) { clearInterval(testRing.timer); stopAlarmSound(testRing); testRing = null; } $("alarmStop").hidden = true; });
+
 function checkDue() {
   const now = Date.now();
   for (const i of items) if (!i.fired && i.at <= now) { if (now - i.at < 10 * 60e3) fire(i); else { i.fired = true; save(); } }
