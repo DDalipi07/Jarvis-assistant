@@ -1,0 +1,1387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Jarvis Vision</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* HUD console: camera feed on the left with gesture readout, alarms and gesture guide on the right. Single dark theme, matching the Jarvis web page. */
+:root{
+  --void:#060c13; --panel:#0b1520; --panel-2:#0f1c2a; --line:#1c3246; --line-hi:#2a4a66;
+  --cyan:#4fd6ff; --cyan-dim:#1f6f8c; --amber:#ffb547; --red:#ff6b6b; --green:#5be3a6;
+  --text:#d6e6f1; --muted:#7f98ab;
+  --f-display:"Chakra Petch","Segoe UI",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;background:var(--void);color:var(--text)}
+body{font-family:var(--f-body);font-size:15px;line-height:1.5;padding:18px max(16px,env(safe-area-inset-left,0px)) 28px;
+  background-image:radial-gradient(circle at 1px 1px,rgba(79,214,255,.07) 1px,transparent 0);background-size:22px 22px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:12px}
+.brand{font-family:var(--f-display);font-weight:600;letter-spacing:.32em;font-size:22px;color:var(--cyan)}
+.brand small{display:block;font-family:var(--f-mono);font-weight:400;letter-spacing:.08em;font-size:11px;color:var(--muted)}
+.clock{font-family:var(--f-mono);font-variant-numeric:tabular-nums;text-align:right}
+.clock b{display:block;font-size:26px;font-weight:500;letter-spacing:.04em}
+.clock span{font-size:12px;color:var(--muted)}
+.grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:880px){.grid{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;min-width:0}
+.ph{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);font-family:var(--f-display);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+.ph em{font-style:normal;color:var(--cyan)}
+.stage{position:relative;aspect-ratio:16/10;max-width:100%;background:#03070b;overflow:hidden}
+.stage video,.stage canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.stage video{opacity:.85}
+.hud{position:absolute;left:12px;top:12px;right:12px;display:flex;justify-content:space-between;gap:8px;font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;pointer-events:none}
+.hud span{background:rgba(6,12,19,.75);border:1px solid var(--line-hi);padding:3px 8px;border-radius:3px}
+.corner{position:absolute;width:26px;height:26px;border-color:var(--cyan);border-style:solid;opacity:.7;pointer-events:none}
+.c1{left:8px;top:8px;border-width:2px 0 0 2px}.c2{right:8px;top:8px;border-width:2px 2px 0 0}
+.c3{left:8px;bottom:8px;border-width:0 0 2px 2px}.c4{right:8px;bottom:8px;border-width:0 2px 2px 0}
+.boot{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:20px}
+.boot p{margin:0;color:var(--muted);max-width:42ch}
+.readout{display:flex;align-items:center;gap:16px;padding:14px;border-top:1px solid var(--line);flex-wrap:wrap}
+.ring{width:64px;height:64px;flex:none}
+.ring circle{fill:none;stroke-width:5}
+.ring .bg{stroke:var(--line)}
+.ring .fg{stroke:var(--cyan);stroke-linecap:round;transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset .08s linear}
+.gname{font-family:var(--f-display);font-size:24px;font-weight:500;letter-spacing:.06em}
+.gact{font-size:13px;color:var(--muted)}
+.btn{background:var(--cyan);color:#04121a;border:0;border-radius:4px;padding:10px 16px;font-family:var(--f-display);font-weight:600;letter-spacing:.08em;cursor:pointer;white-space:nowrap;font-size:14px}
+.btn.ghost{background:transparent;color:var(--cyan);border:1px solid var(--line-hi)}
+.btn:disabled{opacity:.5;cursor:default}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
+.guide{list-style:none;margin:0;padding:6px 0}
+.guide li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:8px 14px;border-top:1px solid rgba(28,50,70,.6);align-items:baseline}
+.guide li:first-child{border-top:0}
+.guide b{font-family:var(--f-mono);font-weight:500;font-size:12px;letter-spacing:.06em;color:var(--cyan)}
+.guide li.hit{background:rgba(79,214,255,.08)}
+.agenda .item{display:grid;grid-template-columns:86px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 14px;border-top:1px solid rgba(28,50,70,.6)}
+.item time{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.item .t{min-width:0;overflow-wrap:anywhere}
+.k{display:inline-block;font-family:var(--f-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:1px 6px;border-radius:3px;margin-right:6px;vertical-align:1px}
+.k.alarm{color:var(--amber);border:1px solid rgba(255,181,71,.45)}
+.k.reminder{color:var(--cyan);border:1px solid rgba(79,214,255,.45)}
+.k.timer{color:var(--green);border:1px solid rgba(91,227,166,.45)}
+.x{background:none;border:0;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:2px 6px}
+.x:hover{color:var(--red)}
+.empty{padding:18px 14px;color:var(--muted)}
+form.add{display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px;padding:12px 14px;border-top:1px solid var(--line)}
+form.add .row{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap}
+form.add .row input{flex:1;min-width:0}
+input,select{font:inherit;color:var(--text);background:var(--void);border:1px solid var(--line-hi);border-radius:4px;padding:9px 10px;min-width:0}
+.quick{display:flex;gap:6px;flex-wrap:wrap;padding:0 14px 12px}
+.err{grid-column:1/-1;color:var(--red);font-size:12px}
+.alert{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 16px;border:1px solid var(--amber);border-radius:6px;background:rgba(255,181,71,.08)}
+.alert strong{font-family:var(--f-display);font-size:18px;color:var(--amber);letter-spacing:.06em}
+.alert .grow{flex:1;min-width:0;overflow-wrap:anywhere}
+.alert small{display:block;font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.log{font-family:var(--f-mono);font-size:12px;color:var(--muted);padding:8px 14px 12px;max-height:150px;overflow-y:auto}
+.log div{padding:2px 0}
+.log b{color:var(--cyan);font-weight:500}
+.side{display:flex;flex-direction:column;gap:18px;min-width:0}
+.np{display:grid;grid-template-columns:96px minmax(0,1fr);gap:14px;padding:14px;align-items:center}
+.np img,.np .art{width:96px;height:96px;border-radius:4px;object-fit:cover;background:var(--panel-2);border:1px solid var(--line)}
+.np .song{font-family:var(--f-display);font-size:18px;font-weight:500;line-height:1.25;overflow-wrap:anywhere}
+.np .artist{color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.bar{height:3px;background:var(--line);border-radius:2px;margin-top:10px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--green)}
+.spset{display:flex;flex-direction:column;gap:8px;padding:12px 14px 14px}
+.spset p{margin:0;font-size:12px;color:var(--muted)}
+.spset code{font-family:var(--f-mono);color:var(--text);background:var(--void);padding:1px 5px;border-radius:3px;overflow-wrap:anywhere}
+.spset .row{display:flex;gap:8px;flex-wrap:wrap}
+.spset .row input{flex:1;min-width:0}
+.pop{position:fixed;z-index:30;left:max(16px,env(safe-area-inset-left,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));width:min(340px,calc(100vw - 32px));display:grid;grid-template-columns:110px minmax(0,1fr);gap:14px;align-items:center;background:var(--panel-2);border:1px solid var(--green);border-radius:8px;padding:12px;box-shadow:0 12px 40px rgba(0,0,0,.6)}
+.pop img{width:110px;height:110px;border-radius:4px;object-fit:cover}
+.pop .eyebrow{font-family:var(--f-mono);font-size:10px;letter-spacing:.16em;color:var(--green);text-transform:uppercase}
+@media (prefers-reduced-motion:no-preference){.pop{animation:rise .4s ease-out}}
+@keyframes rise{from{transform:translateY(20px);opacity:0}to{transform:none;opacity:1}}
+.chat{height:300px;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:88%;padding:9px 12px;border-radius:6px;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg.me{align-self:flex-end;background:var(--panel-2);border:1px solid var(--line-hi)}
+.msg.ai{align-self:flex-start;border-left:2px solid var(--cyan);border-radius:0;padding-left:12px}
+.msg.ai::before{content:"JARVIS";display:block;font-family:var(--f-mono);font-size:10px;letter-spacing:.18em;color:var(--cyan);margin-bottom:2px}
+.msg.sys{align-self:center;font-family:var(--f-mono);font-size:11px;color:var(--muted);text-align:center}
+.msg .src{display:block;margin-top:6px;font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.msg .src a{color:var(--cyan)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;padding:0 14px 10px}
+.chip{font:12px var(--f-mono);color:var(--cyan);background:transparent;border:1px solid var(--line-hi);border-radius:20px;padding:4px 10px;cursor:pointer}
+.chip:hover{border-color:var(--cyan)}
+form.ask{display:flex;gap:8px;padding:12px 14px;border-top:1px solid var(--line)}
+form.ask input{flex:1}
+.mic{width:42px;flex:none;padding:0;font-size:18px}
+.mic.on{background:var(--red);color:#fff}
+.keybox{display:flex;flex-direction:column;gap:8px;padding:14px;border-bottom:1px solid var(--line)}
+.keybox p{margin:0;font-size:13px;color:var(--muted)}
+.keybox .row{display:flex;gap:8px;flex-wrap:wrap}
+.keybox .row input{flex:1;min-width:0}
+.linkbtn{background:none;border:0;color:var(--muted);font:11px var(--f-mono);cursor:pointer;text-decoration:underline;padding:0}
+.reactor{width:14px;height:14px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px 2px rgba(79,214,255,.5);display:inline-block;vertical-align:-2px;margin-right:8px}
+.reactor.busy{background:var(--amber);box-shadow:0 0 12px 3px rgba(255,181,71,.6)}
+@media (prefers-reduced-motion:no-preference){.reactor.busy{animation:pulse 1s ease-in-out infinite}}
+@keyframes pulse{50%{opacity:.4}}
+.mk{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--line)}
+.tile{background:var(--panel);padding:10px 14px;min-width:0}
+.tile b{font-family:var(--f-mono);font-weight:500;letter-spacing:.08em;font-size:13px}
+.tile .chg{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:18px;display:block}
+.tile .chg.down{color:var(--red)} .tile .chg.up{color:var(--green)} .tile .chg.flat{color:var(--muted)}
+.tile small{display:block;color:var(--muted);font-size:12px;line-height:1.35;overflow-wrap:anywhere}
+.story{padding:10px 14px;border-top:1px solid rgba(28,50,70,.6)}
+.story .tag{font-family:var(--f-mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--cyan)}
+.story h3{margin:2px 0;font-family:var(--f-body);font-weight:500;font-size:15px;line-height:1.35;text-wrap:balance}
+.story p{margin:0;color:var(--muted);font-size:13px}
+.bsrc{padding:8px 14px 12px;font:11px var(--f-mono);color:var(--muted);border-top:1px solid var(--line);overflow-wrap:anywhere}
+.bsrc a{color:var(--cyan)}
+.toasts{position:fixed;z-index:31;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));width:min(380px,calc(100vw - 32px));display:flex;flex-direction:column;gap:10px}
+.toast{background:var(--panel-2);border:1px solid var(--cyan);border-radius:8px;box-shadow:0 12px 40px rgba(0,0,0,.6);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.toast .eyebrow{font-family:var(--f-mono);font-size:11px;letter-spacing:.16em;color:var(--cyan);text-transform:uppercase}
+.toast ul{margin:0;padding-left:18px;font-size:14px;display:flex;flex-direction:column;gap:4px}
+.toast .acts{display:flex;gap:8px;justify-content:flex-end}
+@media (prefers-reduced-motion:no-preference){.toast{animation:rise .35s ease-out}}
+.brandwrap{display:flex;align-items:center;gap:14px;min-width:0}
+.core-cv{width:84px;height:84px;flex:none;cursor:pointer;border-radius:50%}
+.core-cv:focus-visible{outline:2px solid var(--cyan);outline-offset:4px}
+@media (max-width:480px){.core-cv{width:64px;height:64px}}
+.srow{display:grid;grid-template-columns:96px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 14px;border-top:1px solid rgba(28,50,70,.6)}
+.srow:first-child{border-top:0}
+.srow time{font-family:var(--f-mono);font-size:12px;font-variant-numeric:tabular-nums}
+.srow time.soon{color:var(--amber)}
+.srow .t{min-width:0;overflow-wrap:anywhere}
+.srow .course{display:block;font-family:var(--f-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--cyan)}
+.srow a{font-family:var(--f-mono);font-size:11px;color:var(--cyan)}
+.setup{display:flex;flex-direction:column;gap:8px;padding:12px 14px 14px}
+.setup p,.setup ol{margin:0;font-size:13px;color:var(--muted)}
+.setup ol{padding-left:18px;display:flex;flex-direction:column;gap:3px}
+.setup b{color:var(--text);font-weight:500}
+.lbl{font:11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:4px}
+.toast.school{border-color:var(--amber)} .toast.school .eyebrow{color:var(--amber)}
+.tog{display:flex;align-items:center;gap:6px;font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;color:var(--muted);text-transform:none;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brandwrap"><canvas class="core-cv" id="coreCv" tabindex="0" role="button" aria-label="Talk to Jarvis" title="Click to talk to Jarvis"></canvas><div class="brand">J.A.R.V.I.S.<small>Personal assistant · vision, voice and music</small></div></div>
+    <div class="clock"><b id="clk">--:--:--</b><span id="dte">&nbsp;</span></div>
+  </header>
+
+  <div id="alerts" class="wrap" style="gap:10px"></div>
+
+  <div class="grid">
+    <div class="side">
+    <section class="panel">
+      <div class="ph"><span>Optical sensor</span><label class="tog"><input type="checkbox" id="voice" checked> Spoken replies</label></div>
+      <div class="stage">
+        <video id="video" playsinline muted></video>
+        <canvas id="canvas"></canvas>
+        <i class="corner c1"></i><i class="corner c2"></i><i class="corner c3"></i><i class="corner c4"></i>
+        <div class="hud"><span id="hudState">OFFLINE</span><span id="hudFps">-- FPS</span></div>
+        <div class="boot" id="boot">
+          <p>Jarvis needs your webcam to read hand gestures. Video stays on your computer and is never uploaded.</p>
+          <button class="btn" id="startBtn" type="button">Activate camera</button>
+          <p id="bootMsg" style="font-size:13px"></p>
+        </div>
+      </div>
+      <div class="readout">
+        <svg class="ring" viewBox="0 0 64 64" aria-hidden="true"><circle class="bg" cx="32" cy="32" r="27"/><circle class="fg" id="ringFg" cx="32" cy="32" r="27" stroke-dasharray="169.6" stroke-dashoffset="169.6"/></svg>
+        <div style="min-width:0;flex:1">
+          <div class="gname" id="gName">No hand detected</div>
+          <div class="gact" id="gAct">Hold a gesture steady for one second to trigger it.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="ph"><span><i class="reactor" id="reactor" aria-hidden="true"></i>Talk to Jarvis</span><em id="costNote">$0.000 today</em></div>
+      <div class="keybox" id="keyBox">
+        <p>Jarvis needs an AI key to think. Open <b>Settings</b> (bottom right), choose Claude or OpenAI, and paste your API key. It's saved only in this browser.</p>
+        <button class="btn" id="openSettings" type="button" style="align-self:flex-start">Open settings</button>
+      </div>
+      <div class="chat" id="chat" aria-live="polite">
+        <div class="msg ai">Systems online. Ask me anything, set alarms, check the news or your stocks, or control your music. You can also talk to me with the microphone button.</div>
+      </div>
+      <div class="chips" id="chips">
+        <button class="chip" type="button">How are NVIDIA, Apple and Tesla doing today?</button>
+        <button class="chip" type="button">What's happening in the news today?</button>
+        <button class="chip" type="button">What do I have due this week?</button>
+      </div>
+      <form class="ask" id="askForm">
+        <button class="btn ghost mic" id="micBtn" type="button" aria-label="Speak to Jarvis" title="Speak to Jarvis">&#127908;</button>
+        <input type="text" id="q" placeholder="Talk to Jarvis…" autocomplete="off" aria-label="Message to Jarvis">
+        <button class="btn" id="sendBtn" type="submit">Send</button>
+      </form>
+      <div style="padding:0 14px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <label for="voicePick" style="font:11px var(--f-mono);color:var(--muted);letter-spacing:.06em">VOICE</label>
+        <select id="voicePick" style="flex:1;min-width:0;max-width:320px;padding:6px 8px"></select>
+        <button class="btn ghost" id="voiceTest" type="button" style="padding:6px 12px">Test</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="ph"><span>Activity</span></div>
+      <div class="log" id="log"><div>Standing by.</div></div>
+    </section>
+    </div>
+
+    <div class="side">
+      <section class="panel" id="schoolPanel">
+        <div class="ph"><span>School</span><span style="display:flex;gap:10px;align-items:center"><em id="schoolCount">not connected</em><button class="linkbtn" id="schoolNow" type="button" hidden>Check now</button></span></div>
+        <div id="schoolBody"></div>
+        <div class="setup" id="schoolSetup" hidden>
+          <p>Connect your Gmail so Jarvis can read Google Classroom and school emails. If your school mail is a separate account, forward it to this Gmail first.</p>
+          <ol>
+            <li>Turn on <b>2-Step Verification</b> at myaccount.google.com/security</li>
+            <li>Create an app password at <b>myaccount.google.com/apppasswords</b> (name it Jarvis)</li>
+            <li>Paste your Gmail address and the 16-letter password below</li>
+          </ol>
+          <input type="text" id="gAddr" placeholder="Your Gmail address" aria-label="Gmail address" autocomplete="off">
+          <input type="text" id="gSchool" placeholder="School or university email (optional), e.g. you@university.edu" aria-label="University email" autocomplete="off">
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><input type="password" id="gPass" placeholder="App password (16 letters)" aria-label="Gmail app password" autocomplete="off" style="flex:1;min-width:0"><button class="btn" id="gSave" type="button">Connect</button></div>
+          <p id="gErr" style="color:var(--red)"></p>
+        </div>
+      </section>
+
+      <section class="panel" id="briefPanel">
+        <div class="ph"><span id="briefTitle">Briefing</span><span style="display:flex;gap:10px;align-items:center"><em id="briefTime">7:30 and 18:30</em><button class="linkbtn" id="briefNow" type="button">Refresh</button></span></div>
+        <div id="briefBody"><div class="empty">Your briefing on NVDA, AAPL, TSLA, the S&amp;P 500 and the news arrives automatically at 7:30 and 18:30 while Jarvis is open. If you open Jarvis later, it catches up right away.</div></div>
+      </section>
+
+      <section class="panel">
+        <div class="ph"><span>Now playing</span><em id="spState">Spotify</em></div>
+        <div class="np" id="npBox" hidden>
+          <img id="npArt" alt="">
+          <div style="min-width:0">
+            <div class="song" id="npSong"></div>
+            <div class="artist" id="npArtist"></div>
+            <div class="bar"><i id="npBar"></i></div>
+          </div>
+        </div>
+        <div class="spset" id="spSetup">
+          <p id="spMsg">Connect your Spotify account to show the album cover and song you're listening to.</p>
+          <div class="row">
+            <input type="text" id="spClient" placeholder="Paste your Spotify Client ID" aria-label="Spotify Client ID" autocomplete="off">
+            <button class="btn" id="spConnect" type="button">Connect</button>
+          </div>
+          <p>Redirect URI to register: <code id="spRedirect"></code></p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="ph"><span>Gestures</span><em>hold 1 s</em></div>
+        <ul class="guide" id="guide">
+          <li data-g="Open_Palm"><b>Open palm</b><span>Dismiss a ringing alarm, otherwise pause or play music</span></li>
+          <li data-g="Thumb_Down"><b>Thumbs down</b><span>Skip to the next song</span></li>
+          <li data-g="Thumb_Up"><b>Thumbs up</b><span>Snooze 5 min, or read what's next</span></li>
+          <li data-g="Victory"><b>Peace sign</b><span>Read your next 3 items aloud</span></li>
+          <li data-g="Pointing_Up"><b>Point up</b><span>Start a 5-minute timer</span></li>
+          <li data-g="Pinch"><b>Pinch &amp; move</b><span>Touch thumb and index (other fingers up), then move up or down to change the volume</span></li>
+          <li data-g="Closed_Fist"><b>Fist</b><span>Mute or unmute Jarvis's voice</span></li>
+          <li data-g="ILoveYou"><b>Rock on</b><span>Say hello to Jarvis</span></li>
+        </ul>
+      </section>
+
+      <section class="panel">
+        <div class="ph"><span>Alarms &amp; timers</span><em id="count">0 upcoming</em></div>
+        <div class="agenda" id="agenda"></div>
+        <form class="add" id="addForm" novalidate>
+          <select id="kind" aria-label="Type"><option value="alarm">Alarm</option><option value="reminder">Reminder</option></select>
+          <input type="text" id="title" placeholder="Label, e.g. Wake up" aria-label="Label">
+          <div class="row"><input type="datetime-local" id="when" aria-label="Date and time"><button class="btn ghost" type="submit">Add</button></div>
+          <div class="err" id="addErr"></div>
+        </form>
+        <div class="quick">
+          <button class="btn ghost" type="button" data-min="1">Timer 1 min</button>
+          <button class="btn ghost" type="button" data-min="5">5 min</button>
+          <button class="btn ghost" type="button" data-min="25">25 min</button>
+        </div>
+      </section>
+
+      <section class="panel" id="settingsPanel">
+        <div class="ph"><span>Settings</span><em id="brainNote">no AI key yet</em></div>
+        <div class="setup">
+          <label class="lbl" for="provPick">AI provider</label>
+          <select id="provPick"><option value="claude">Claude (Anthropic)</option><option value="openai">OpenAI (ChatGPT models)</option></select>
+          <label class="lbl" for="modelPick">Model</label>
+          <select id="modelPick"></select>
+          <input type="text" id="modelCustom" placeholder="Custom model name" aria-label="Custom model name" autocomplete="off" hidden>
+          <label class="lbl" for="apiKey">API key</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><input type="password" id="apiKey" placeholder="Paste your API key" aria-label="API key" autocomplete="off" style="flex:1;min-width:0"><button class="btn" id="saveKey" type="button">Save key</button></div>
+          <p id="keyHelp"></p>
+          <p id="keyErr" style="color:var(--red)"></p>
+          <button class="linkbtn" id="forgetKey" type="button" hidden style="align-self:flex-start">Remove this API key from this browser</button>
+          <label class="lbl" for="pName">Your name (optional)</label>
+          <input type="text" id="pName" placeholder="e.g. Alex" autocomplete="off">
+          <label class="lbl" for="pCity">Where you live</label>
+          <input type="text" id="pCity" placeholder="e.g. Lisbon, Portugal" autocomplete="off">
+          <label class="lbl" for="pStocks">Stocks to follow</label>
+          <input type="text" id="pStocks" placeholder="e.g. NVDA, AAPL, TSLA, SPY" autocomplete="off">
+          <label class="lbl" for="pTopics">News topics</label>
+          <input type="text" id="pTopics" placeholder="e.g. Portugal, USA, World, Tech & markets" autocomplete="off">
+          <button class="btn ghost" id="saveProfile" type="button" style="align-self:flex-start">Save preferences</button>
+          <p>Keys and preferences never leave this computer, except when sent to the AI provider you chose.</p>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<script type="module">
+const $ = id => document.getElementById(id);
+const pad = n => String(n).padStart(2, "0");
+const fmt = ms => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+
+/* ---------- clock ---------- */
+function tickClock() {
+  const d = new Date();
+  $("clk").textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  $("dte").textContent = d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+}
+
+/* ---------- log, sound, voice ---------- */
+function log(msg, tag = "") {
+  const d = document.createElement("div");
+  d.innerHTML = `<span>${fmt(Date.now())}</span> ${tag ? `<b>${tag}</b> ` : ""}`;
+  d.append(document.createTextNode(msg));
+  $("log").prepend(d);
+  while ($("log").children.length > 40) $("log").lastChild.remove();
+}
+let audio = null;
+function armAudio() { try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch {} }
+document.addEventListener("pointerdown", armAudio);
+function beep(times = 2, freq = 880) {
+  if (!audio) return;
+  for (let n = 0; n < times; n++) {
+    const o = audio.createOscillator(), g = audio.createGain(), t0 = audio.currentTime + n * 0.4;
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.25, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.28);
+    o.connect(g).connect(audio.destination); o.start(t0); o.stop(t0 + 0.3);
+  }
+}
+function chirp() { beep(1, 1320); }
+
+/* ---------- voice: prefer a refined British male voice ---------- */
+const VOICE_PREFS = [/Ryan.*Natural/i, /Thomas.*Natural/i, /Oliver.*Natural/i, /Google UK English Male/i, /Microsoft (George|Ryan)/i, /^Daniel/i, /Arthur/i, /en-GB.*male/i];
+let voiceList = [];
+function pickVoice() {
+  voiceList = (speechSynthesis.getVoices() || []);
+  let saved = null; try { saved = localStorage.getItem("jarvis-voice"); } catch {}
+  if (saved) { const v = voiceList.find(v => v.name === saved); if (v) return v; }
+  for (const re of VOICE_PREFS) { const v = voiceList.find(v => re.test(v.name)); if (v) return v; }
+  return voiceList.find(v => /en-GB/i.test(v.lang)) || voiceList.find(v => /^en/i.test(v.lang)) || null;
+}
+let jarvisVoice = null;
+if ("speechSynthesis" in window) { jarvisVoice = pickVoice(); speechSynthesis.onvoiceschanged = () => { jarvisVoice = pickVoice(); if (typeof fillVoices === "function") fillVoices(); }; }
+function speak(text) {
+  if (!$("voice").checked || !("speechSynthesis" in window)) return;
+  try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); if (jarvisVoice) { u.voice = jarvisVoice; u.lang = jarvisVoice.lang; } u.rate = 1.0; u.pitch = 0.95; speechSynthesis.speak(u); } catch {}
+}
+
+/* ---------- alarms (saved in this browser) ---------- */
+const LS = "jarvis-vision-items";
+let items = [];
+try { items = JSON.parse(localStorage.getItem(LS) || "[]").filter(i => typeof i.at === "number"); } catch { items = []; }
+const save = () => { try { localStorage.setItem(LS, JSON.stringify(items)); } catch {} };
+function addItem(kind, title, at) { items.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), kind, title, at, fired: false }); save(); render(); }
+function upcoming() { const now = Date.now(); return items.filter(i => !i.fired && i.at >= now - 1000).sort((a, b) => a.at - b.at); }
+function whenWords(at) {
+  const mins = Math.round((at - Date.now()) / 60000);
+  if (mins < 1) return "in under a minute";
+  if (mins < 60) return `in ${mins} minute${mins === 1 ? "" : "s"}`;
+  const d = new Date(at), t = new Date();
+  return d.toDateString() === t.toDateString() ? `at ${fmt(at)}` : `on ${d.toLocaleDateString(undefined, { weekday: "long" })} at ${fmt(at)}`;
+}
+function render() {
+  items = items.filter(i => !i.fired || Date.now() - i.at < 3600e3);
+  const list = upcoming();
+  $("count").textContent = `${list.length} upcoming`;
+  const box = $("agenda"); box.textContent = "";
+  if (!list.length) { box.innerHTML = '<div class="empty">Nothing set. Point a finger up for a 5-minute timer, or add an alarm below.</div>'; return; }
+  for (const i of list) {
+    const row = document.createElement("div"); row.className = "item";
+    const tm = document.createElement("time"); tm.textContent = (new Date(i.at).toDateString() === new Date().toDateString() ? "" : new Date(i.at).toLocaleDateString("en-GB", { weekday: "short" }) + " ") + fmt(i.at);
+    const t = document.createElement("div"); t.className = "t";
+    const k = document.createElement("span"); k.className = "k " + i.kind; k.textContent = i.kind;
+    t.append(k, document.createTextNode(i.title));
+    const x = document.createElement("button"); x.className = "x"; x.type = "button"; x.textContent = "×"; x.setAttribute("aria-label", "Delete " + i.title);
+    x.onclick = () => { items = items.filter(j => j.id !== i.id); save(); render(); };
+    row.append(tm, t, x); box.append(row);
+  }
+}
+
+/* ---------- ringing ---------- */
+let ringing = null; // {item, el, timer}
+function fire(i) {
+  i.fired = true; save();
+  if (ringing) stopRinging(false);
+  const label = i.kind === "reminder" ? "REMINDER" : i.kind === "timer" ? "TIME'S UP" : "ALARM";
+  const el = document.createElement("div"); el.className = "alert"; el.setAttribute("role", "alert");
+  el.innerHTML = `<strong>${label}</strong><div class="grow"></div>`;
+  const g = el.querySelector(".grow"); g.textContent = i.title;
+  const s = document.createElement("small"); s.textContent = "Open palm to dismiss · thumbs up to snooze"; g.append(s);
+  const sn = document.createElement("button"); sn.className = "btn ghost"; sn.type = "button"; sn.textContent = "Snooze 5 min"; sn.onclick = () => snooze();
+  const ok = document.createElement("button"); ok.className = "btn"; ok.type = "button"; ok.textContent = "Dismiss"; ok.onclick = () => stopRinging(true);
+  el.append(sn, ok); $("alerts").prepend(el);
+  beep(4);
+  const timer = setInterval(() => beep(3), 3500);
+  ringing = { item: i, el, timer };
+  speak(`${label.toLowerCase()}. ${i.title}`);
+  log(i.title, label);
+  render();
+}
+function stopRinging(announce) {
+  if (!ringing) return;
+  clearInterval(ringing.timer); ringing.el.remove();
+  if (announce) { speak("Dismissed."); log("Alert dismissed"); }
+  ringing = null;
+}
+function snooze() {
+  if (!ringing) return;
+  const it = ringing.item; stopRinging(false);
+  addItem(it.kind, it.title, Date.now() + 5 * 60e3);
+  speak("Snoozed for five minutes."); log(`Snoozed "${it.title}" 5 min`);
+}
+function checkDue() {
+  const now = Date.now();
+  for (const i of items) if (!i.fired && i.at <= now) { if (now - i.at < 10 * 60e3) fire(i); else { i.fired = true; save(); } }
+}
+
+/* ---------- forms ---------- */
+function parseLocal(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(s || "");
+  return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).getTime() : NaN;
+}
+$("addForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const title = $("title").value.trim(), at = parseLocal($("when").value);
+  if (!title) { $("addErr").textContent = "Give it a label first."; return; }
+  if (isNaN(at)) { $("addErr").textContent = "Pick a date and time."; return; }
+  if (at <= Date.now()) { $("addErr").textContent = "That time has already passed. Pick a later one."; return; }
+  $("addErr").textContent = ""; addItem($("kind").value, title, at);
+  log(`${title} ${whenWords(at)}`, "SET"); $("title").value = ""; $("when").value = "";
+});
+["title", "when"].forEach(id => $(id).addEventListener("input", () => { $("addErr").textContent = ""; }));
+document.querySelectorAll("[data-min]").forEach(b => b.addEventListener("click", () => startTimer(+b.dataset.min)));
+function startTimer(min) {
+  addItem("timer", `${min}-minute timer`, Date.now() + min * 60e3);
+  speak(`${min} minute timer started.`); log(`${min}-minute timer`, "SET");
+}
+
+/* ---------- gesture actions ---------- */
+const NAMES = { Open_Palm: "Open palm", Thumb_Up: "Thumbs up", Victory: "Peace sign", Pointing_Up: "Point up", Closed_Fist: "Fist", ILoveYou: "Rock on", Thumb_Down: "Thumbs down" };
+function readNext(n) {
+  const list = upcoming().slice(0, n);
+  if (!list.length) { speak("Your schedule is clear."); log("Schedule is clear", "READ"); return; }
+  const text = list.map(i => `${i.title} ${whenWords(i.at)}`).join(". Then ");
+  speak((list.length === 1 ? "Next up: " : "Coming up: ") + text + ".");
+  log(text, "READ");
+}
+/* ---------- Spotify (Authorization Code with PKCE, no server needed) ---------- */
+const SP_SCOPES = "user-read-currently-playing user-read-playback-state user-modify-playback-state";
+const REDIRECT = location.origin + location.pathname;
+const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} };
+let spTok = null; try { spTok = JSON.parse(lsGet("sp-token") || "null"); } catch {}
+let spTrackId = null, spPlaying = false, spTimer = null, spBackoff = 0;
+$("spRedirect").textContent = REDIRECT.startsWith("http://127.0.0.1") ? REDIRECT : "http://127.0.0.1:8000/jarvis_vision.html";
+$("spClient").value = lsGet("sp-client") || "";
+
+function spMsg(t) { $("spMsg").textContent = t; }
+function b64url(buf) { return btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
+function randStr(n) { const c = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"; const a = crypto.getRandomValues(new Uint8Array(n)); return Array.from(a, x => c[x % c.length]).join(""); }
+
+async function spConnect() {
+  const id = $("spClient").value.trim();
+  if (!/^[0-9a-f]{32}$/i.test(id)) { spMsg("That doesn't look like a Client ID. It's 32 letters and numbers, from your app's page on developer.spotify.com."); return; }
+  if (!REDIRECT.startsWith("http://127.0.0.1") || !window.crypto || !crypto.subtle) {
+    spMsg("Spotify only works when this page is opened at http://127.0.0.1:8000/jarvis_vision.html. Start the local server (see instructions), then open that address."); return;
+  }
+  lsSet("sp-client", id);
+  const verifier = randStr(64), state = randStr(16);
+  lsSet("sp-verifier", verifier); lsSet("sp-state", state);
+  const challenge = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
+  const q = new URLSearchParams({ response_type: "code", client_id: id, scope: SP_SCOPES, redirect_uri: REDIRECT, code_challenge_method: "S256", code_challenge: challenge, state });
+  location.href = "https://accounts.spotify.com/authorize?" + q;
+}
+$("spConnect").addEventListener("click", spConnect);
+
+async function spTokenRequest(params) {
+  const r = await fetch("https://accounts.spotify.com/api/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(params) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.access_token) throw new Error(j.error_description || j.error || "token_failed");
+  spTok = { access: j.access_token, refresh: j.refresh_token || (spTok && spTok.refresh), exp: Date.now() + (j.expires_in - 60) * 1000 };
+  lsSet("sp-token", JSON.stringify(spTok));
+}
+async function spHandleRedirect() {
+  const p = new URLSearchParams(location.search);
+  if (!p.has("code") && !p.has("error")) return;
+  history.replaceState(null, "", location.pathname);
+  if (p.get("error")) { spMsg("Spotify connection was cancelled. Click Connect to try again."); return; }
+  if (p.get("state") !== lsGet("sp-state")) { spMsg("Spotify login didn't match this page. Click Connect to try again."); return; }
+  try {
+    await spTokenRequest({ grant_type: "authorization_code", code: p.get("code"), redirect_uri: REDIRECT, client_id: lsGet("sp-client"), code_verifier: lsGet("sp-verifier") });
+    log("Spotify connected", "SYS");
+  } catch (e) { spMsg("Couldn't finish connecting to Spotify (" + e.message + "). Check the Client ID and Redirect URI, then try again."); }
+  lsSet("sp-verifier", null); lsSet("sp-state", null);
+}
+async function spFetch(path, opts = {}) {
+  if (!spTok) throw new Error("not_connected");
+  if (Date.now() > spTok.exp) await spTokenRequest({ grant_type: "refresh_token", refresh_token: spTok.refresh, client_id: lsGet("sp-client") });
+  let r = await fetch("https://api.spotify.com/v1" + path, { ...opts, headers: { Authorization: "Bearer " + spTok.access, ...(opts.headers || {}) } });
+  if (r.status === 401) {
+    await spTokenRequest({ grant_type: "refresh_token", refresh_token: spTok.refresh, client_id: lsGet("sp-client") });
+    r = await fetch("https://api.spotify.com/v1" + path, { ...opts, headers: { Authorization: "Bearer " + spTok.access } });
+  }
+  return r;
+}
+function spShowConnected(on) {
+  $("spSetup").hidden = on;
+  $("spState").textContent = on ? "Spotify connected" : "Spotify";
+  if (!on) $("npBox").hidden = true;
+}
+function popSong(t, art) {
+  document.querySelectorAll(".pop").forEach(p => p.remove());
+  const p = document.createElement("div"); p.className = "pop"; p.setAttribute("role", "status");
+  const img = document.createElement("img"); img.alt = ""; if (art) img.src = art;
+  const box = document.createElement("div"); box.style.minWidth = "0";
+  const e = document.createElement("div"); e.className = "eyebrow"; e.textContent = "Now playing";
+  const s = document.createElement("div"); s.className = "song"; s.style.fontFamily = "var(--f-display)"; s.style.fontSize = "18px"; s.style.overflowWrap = "anywhere"; s.textContent = t.name;
+  const a = document.createElement("div"); a.className = "artist"; a.style.color = "var(--muted)"; a.style.fontSize = "13px"; a.textContent = t.artist;
+  box.append(e, s, a);
+  if (art) p.append(img); else p.style.gridTemplateColumns = "1fr";
+  p.append(box); document.body.append(p);
+  setTimeout(() => p.remove(), 7000);
+}
+async function spPoll() {
+  clearTimeout(spTimer);
+  let next = document.hidden ? 15000 : 4000;
+  try {
+    const r = await spFetch("/me/player/currently-playing?additional_types=episode");
+    spShowConnected(true);
+    if (r.status === 204) { $("npBox").hidden = false; $("npSong").textContent = "Nothing playing"; $("npArtist").textContent = "Start a song in Spotify on any device."; $("npArt").removeAttribute("src"); $("npBar").style.width = "0"; spPlaying = false; spTrackId = null; }
+    else if (r.status === 429) { next = Math.min(60000, (Number(r.headers.get("Retry-After")) || 10) * 1000); }
+    else if (r.ok) {
+      const j = await r.json(), it = j.item;
+      spPlaying = !!j.is_playing;
+      if (it) {
+        const name = it.name || "Unknown";
+        const artist = it.artists ? it.artists.map(a => a.name).join(", ") : (it.show && it.show.name) || "";
+        const imgs = (it.album && it.album.images) || it.images || [];
+        const art = imgs.length ? imgs[0].url : "";
+        $("npBox").hidden = false; $("npSong").textContent = name; $("npArtist").textContent = artist + (spPlaying ? "" : " · paused");
+        if (art) $("npArt").src = art; else $("npArt").removeAttribute("src");
+        $("npBar").style.width = it.duration_ms ? Math.min(100, (j.progress_ms / it.duration_ms) * 100) + "%" : "0";
+        if (it.id !== spTrackId) {
+          const first = spTrackId === null && !spPlaying;
+          spTrackId = it.id;
+          if (!first && spPlaying) { popSong({ name, artist }, art); log(`${name} · ${artist}`, "MUSIC"); }
+        }
+      }
+    } else if (r.status === 403) { spMsg("Spotify refused access. Make sure your Spotify account is added under User Management in your app, then reconnect."); spShowConnected(false); return; }
+  } catch (e) {
+    if (e.message === "not_connected") { spShowConnected(false); return; }
+    spBackoff = Math.min(60000, (spBackoff || 4000) * 2); next = spBackoff;
+    $("spState").textContent = "Spotify offline";
+  }
+  spTimer = setTimeout(spPoll, next);
+}
+async function spControl(cmd) {
+  if (!spTok) { speak("Spotify isn't connected."); return; }
+  const map = { next: ["POST", "/me/player/next"], pause: ["PUT", "/me/player/pause"], play: ["PUT", "/me/player/play"] };
+  try {
+    const r = await spFetch(map[cmd][1], { method: map[cmd][0] });
+    if (r.status === 404) { speak("Open Spotify on one of your devices first."); log("No active Spotify device", "MUSIC"); return; }
+    if (!r.ok && r.status !== 204) { log("Spotify said no (" + r.status + ")", "MUSIC"); return; }
+    log(cmd === "next" ? "Skipped song" : cmd === "pause" ? "Paused" : "Playing", "MUSIC");
+    setTimeout(spPoll, 700);
+  } catch { log("Couldn't reach Spotify", "MUSIC"); }
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden && spTok) spPoll(); });
+spHandleRedirect().then(() => { if (spTok) spPoll(); else spShowConnected(false); });
+
+const ACTIONS = {
+  Open_Palm() { if (ringing) stopRinging(true); else if (spTok) spControl(spPlaying ? "pause" : "play"); else { speak("Nothing to dismiss."); log("Nothing ringing", "PALM"); } },
+  Thumb_Down() { spControl("next"); },
+  Thumb_Up() { if (ringing) snooze(); else readNext(1); },
+  Victory() { readNext(3); },
+  Pointing_Up() { startTimer(5); },
+  Closed_Fist() { $("voice").checked = !$("voice").checked; log($("voice").checked ? "Voice on" : "Voice muted", "FIST"); if ($("voice").checked) speak("Voice online."); },
+  ILoveYou() { const h = new Date().getHours(); speak(h < 12 ? "Good morning. All systems are online." : h < 18 ? "Good afternoon. At your service." : "Good evening. Shall I keep an eye on things?"); log("Hello, Jarvis", "HI"); }
+};
+
+/* ---------- vision ---------- */
+const HOLD_MS = 1000, COOLDOWN_MS = 1500, MIN_SCORE = 0.6;
+const CONNECTIONS = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+let recognizer = null, current = null, since = 0, cooldownUntil = 0, lastVideoTime = -1, frames = 0, fpsT = performance.now();
+const video = $("video"), canvas = $("canvas"), ctx = canvas.getContext("2d");
+const RING_LEN = 169.6;
+
+function setRing(p) { $("ringFg").style.strokeDashoffset = String(RING_LEN * (1 - Math.max(0, Math.min(1, p)))); }
+function highlight(g) { document.querySelectorAll("#guide li").forEach(li => li.classList.toggle("hit", li.dataset.g === g)); }
+
+function drawHand(lm) {
+  const w = canvas.width, h = canvas.height;
+  ctx.lineWidth = 2; ctx.strokeStyle = "rgba(79,214,255,.85)";
+  for (const [a, b] of CONNECTIONS) { ctx.beginPath(); ctx.moveTo(lm[a].x * w, lm[a].y * h); ctx.lineTo(lm[b].x * w, lm[b].y * h); ctx.stroke(); }
+  for (let i = 0; i < lm.length; i++) {
+    ctx.beginPath(); ctx.arc(lm[i].x * w, lm[i].y * h, [4, 8, 12, 16, 20].includes(i) ? 5 : 3, 0, Math.PI * 2);
+    ctx.fillStyle = [4, 8, 12, 16, 20].includes(i) ? "#ffb547" : "#4fd6ff"; ctx.fill();
+  }
+}
+
+/* ---------- pinch-to-change-volume ---------- */
+let pinchSince = 0, pinchAnchor = 0, volQueue = { up: 0, down: 0 }, volTimer = null, volWarned = false;
+const hd = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+function isPinch(lm) {
+  const size = hd(lm[0], lm[9]) || 1e-6;
+  return hd(lm[4], lm[8]) / size < 0.28 && lm[12].y < lm[10].y && lm[16].y < lm[14].y && lm[20].y < lm[18].y;
+}
+async function changeVolume(action, steps = 1) {
+  try {
+    const r = await fetch("/api/volume", { method: "POST", headers: { "Content-Type": "application/json", "X-Jarvis": "1" }, body: JSON.stringify({ action, steps }) });
+    if (!r.ok) throw new Error(String(r.status));
+    return true;
+  } catch {
+    if (!volWarned) { volWarned = true; log("Volume needs jarvis_server.py running (not http.server)", "VOLUME"); speak("To control the volume, start me with jarvis server dot p y."); }
+    return false;
+  }
+}
+function queueVolume(dir, n) {
+  volQueue[dir] += n;
+  if (volTimer) return;
+  volTimer = setTimeout(async () => {
+    volTimer = null;
+    const up = volQueue.up, down = volQueue.down; volQueue = { up: 0, down: 0 };
+    const net = up - down;
+    if (net) await changeVolume(net > 0 ? "up" : "down", Math.abs(net));
+  }, 90);
+}
+function handlePinch(lm, t) {
+  const y = (lm[4].y + lm[8].y) / 2;
+  if (!pinchSince) { pinchSince = t; pinchAnchor = y; }
+  $("gName").textContent = "Volume control";
+  if (t - pinchSince < 300) { $("gAct").textContent = "Hold the pinch…"; return; }
+  const STEP = 0.03, n = Math.trunc((pinchAnchor - y) / STEP);
+  if (n) { queueVolume(n > 0 ? "up" : "down", Math.abs(n)); pinchAnchor -= n * STEP; $("gAct").textContent = n > 0 ? "Volume up ▲" : "Volume down ▼"; }
+  else if (!/Volume/.test($("gAct").textContent)) $("gAct").textContent = "Move up for louder, down for quieter. Open your hand to finish.";
+}
+
+function loop() {
+  if (video.readyState >= 2 && video.currentTime !== lastVideoTime) {
+    lastVideoTime = video.currentTime;
+    if (canvas.width !== video.videoWidth) { canvas.width = video.videoWidth; canvas.height = video.videoHeight; }
+    const now = performance.now();
+    let res = null;
+    try { res = recognizer.recognizeForVideo(video, now); } catch (e) { console.error(e); }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    let g = null;
+    const t = Date.now();
+    if (res && res.landmarks && res.landmarks.length && isPinch(res.landmarks[0])) {
+      drawHand(res.landmarks[0]);
+      handlePinch(res.landmarks[0], t);
+      current = null; setRing(0); highlight("Pinch");
+      frames++;
+      if (now - fpsT > 1000) { $("hudFps").textContent = `${frames} FPS`; frames = 0; fpsT = now; }
+      requestAnimationFrame(loop); return;
+    }
+    pinchSince = 0;
+    if (res && res.landmarks && res.landmarks.length) {
+      drawHand(res.landmarks[0]);
+      const top = res.gestures && res.gestures[0] && res.gestures[0][0];
+      if (top && top.score >= MIN_SCORE && ACTIONS[top.categoryName]) g = top.categoryName;
+      $("gName").textContent = g ? NAMES[g] : "Hand detected";
+    } else {
+      $("gName").textContent = "No hand detected";
+    }
+    if (g !== current) { current = g; since = t; }
+    highlight(g);
+    if (g && t >= cooldownUntil) {
+      const p = (t - since) / HOLD_MS; setRing(p);
+      $("gAct").textContent = p < 1 ? "Hold steady…" : "";
+      if (p >= 1) {
+        chirp(); core.flash(); log(NAMES[g], "GESTURE");
+        try { ACTIONS[g](); } catch (e) { console.error(e); }
+        cooldownUntil = t + COOLDOWN_MS; since = t + COOLDOWN_MS; setRing(0);
+        $("gAct").textContent = "Done. Lower your hand or show another gesture.";
+      }
+    } else {
+      setRing(0);
+      if (!g) $("gAct").textContent = "Hold a gesture steady for one second to trigger it.";
+    }
+    frames++;
+    if (now - fpsT > 1000) { $("hudFps").textContent = `${frames} FPS`; frames = 0; fpsT = now; }
+  }
+  requestAnimationFrame(loop);
+}
+
+async function start() {
+  armAudio();
+  const btn = $("startBtn"); btn.disabled = true;
+  const msg = $("bootMsg");
+  try {
+    msg.textContent = "Loading the gesture model (about 8 MB, first time only)…";
+    const vision = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs");
+    const files = await vision.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+    const opts = (delegate) => ({
+      baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task", delegate },
+      runningMode: "VIDEO", numHands: 1
+    });
+    try { recognizer = await vision.GestureRecognizer.createFromOptions(files, opts("GPU")); }
+    catch { recognizer = await vision.GestureRecognizer.createFromOptions(files, opts("CPU")); }
+  } catch (e) {
+    console.error(e);
+    msg.textContent = "Couldn't load the gesture model. Check your internet connection, then reload the page.";
+    btn.disabled = false; return;
+  }
+  try {
+    msg.textContent = "Waiting for camera permission. Click Allow in the browser bar.";
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 960 }, height: { ideal: 720 }, facingMode: "user" }, audio: false });
+    video.srcObject = stream; await video.play();
+  } catch (e) {
+    console.error(e);
+    msg.textContent = e && e.name === "NotAllowedError"
+      ? "Camera access was blocked. Click the camera icon in the address bar, choose Allow, then reload."
+      : e && e.name === "NotReadableError"
+        ? "Your webcam is busy. Close Zoom, Teams, the Camera app or the Python script, then try again."
+        : "Couldn't open the webcam. If you opened this file by double-clicking, try the local server method from the instructions.";
+    btn.disabled = false; return;
+  }
+  $("boot").hidden = true;
+  $("hudState").textContent = "TRACKING";
+  log("Vision online", "SYS"); speak("Vision online.");
+  requestAnimationFrame(loop);
+}
+$("startBtn").addEventListener("click", start);
+
+/* ---------- the AI brain: Claude or OpenAI, called straight from this page ---------- */
+const PROVIDERS = {
+  claude: {
+    name: "Claude", keyLS: "jarvis-api-key", prefix: "sk-ant-", help: "Get a key at platform.claude.com/settings/keys (add a little credit under Billing first).",
+    models: [["claude-haiku-5-5", "Haiku 5.5 — fastest, cheapest"], ["claude-sonnet-5-5", "Sonnet 5.5 — smarter"], ["claude-opus-5-5", "Opus 5.5 — most capable"]]
+  },
+  openai: {
+    name: "OpenAI", keyLS: "jarvis-openai-key", prefix: "sk-", help: "Get a key at platform.openai.com/api-keys (add credit under Billing first).",
+    models: [["gpt-6-astra", "GPT-6 Astra — most capable"], ["gpt-5.6-terra", "GPT-5.6 Terra — faster, cheaper"]]
+  }
+};
+const PRICES = { "claude-haiku-5-5": { in: 0.10 / 1e6, out: 0.50 / 1e6, search: 0.01 } }; // others: shown as tokens
+let prefs = { provider: "claude", models: { claude: "claude-haiku-5-5", openai: "gpt-6-astra" }, name: "", city: "", stocks: "NVDA, AAPL, TSLA, SPY", topics: "USA, World, Tech & markets" };
+try { const p = JSON.parse(lsGet("jarvis-settings") || "{}"); prefs = { ...prefs, ...p, models: { ...prefs.models, ...(p.models || {}) } }; } catch {}
+const savePrefs = () => lsSet("jarvis-settings", JSON.stringify(prefs));
+const provider = () => PROVIDERS[prefs.provider] ? prefs.provider : "claude";
+const providerName = () => PROVIDERS[provider()].name;
+const currentModel = () => prefs.models[provider()] || PROVIDERS[provider()].models[0][0];
+const stockList = () => String(prefs.stocks || "").split(/[,\s]+/).map(x => x.trim().toUpperCase()).filter(Boolean).slice(0, 8);
+const topicList = () => String(prefs.topics || "").split(/[,;]+/).map(x => x.trim()).filter(Boolean).slice(0, 6);
+let apiKey = lsGet(PROVIDERS[provider()].keyLS) || "";
+let brainBusy = false;
+const convo = []; // plain-text memory of recent turns
+
+function fillModels() {
+  const sel = $("modelPick"); sel.textContent = "";
+  for (const [id, label] of PROVIDERS[provider()].models) { const o = document.createElement("option"); o.value = id; o.textContent = label; sel.append(o); }
+  const o = document.createElement("option"); o.value = "__custom"; o.textContent = "Other (type a model name)"; sel.append(o);
+  const known = PROVIDERS[provider()].models.some(([id]) => id === currentModel());
+  sel.value = known ? currentModel() : "__custom";
+  $("modelCustom").hidden = known; if (!known) $("modelCustom").value = currentModel();
+}
+function showKeyBox() {
+  apiKey = lsGet(PROVIDERS[provider()].keyLS) || "";
+  $("keyBox").hidden = !!apiKey; $("forgetKey").hidden = !apiKey;
+  $("keyHelp").textContent = (apiKey ? `${providerName()} key saved. ` : "") + PROVIDERS[provider()].help;
+  $("brainNote").textContent = apiKey ? `${providerName()} · ${currentModel()}` : "no AI key yet";
+}
+function fillSettings() {
+  $("provPick").value = provider(); fillModels(); showKeyBox();
+  $("pName").value = prefs.name || ""; $("pCity").value = prefs.city || ""; $("pStocks").value = prefs.stocks || ""; $("pTopics").value = prefs.topics || "";
+}
+$("provPick").addEventListener("change", e => { prefs.provider = e.target.value; savePrefs(); fillModels(); showKeyBox(); convo.length = 0; });
+$("modelPick").addEventListener("change", e => {
+  $("modelCustom").hidden = e.target.value !== "__custom";
+  if (e.target.value !== "__custom") { prefs.models[provider()] = e.target.value; savePrefs(); showKeyBox(); }
+});
+$("modelCustom").addEventListener("change", e => { const v = e.target.value.trim(); if (v) { prefs.models[provider()] = v; savePrefs(); showKeyBox(); } });
+$("saveKey").addEventListener("click", () => {
+  const k = $("apiKey").value.trim(), P = PROVIDERS[provider()];
+  if (!k.startsWith(P.prefix) || (provider() === "openai" && k.startsWith("sk-ant-"))) { $("keyErr").textContent = `That doesn't look like an ${P.name} API key. It should start with ${P.prefix}.`; return; }
+  lsSet(P.keyLS, k); $("apiKey").value = ""; $("keyErr").textContent = ""; showKeyBox();
+  say("sys", `${P.name} key saved. Jarvis is ready.`);
+  setTimeout(() => { try { briefCheck(); } catch {} }, 500);
+});
+$("apiKey").addEventListener("input", () => { $("keyErr").textContent = ""; });
+$("forgetKey").addEventListener("click", () => { lsSet(PROVIDERS[provider()].keyLS, null); showKeyBox(); say("sys", `${providerName()} key removed from this browser.`); });
+$("saveProfile").addEventListener("click", () => {
+  prefs.name = $("pName").value.trim().slice(0, 40); prefs.city = $("pCity").value.trim().slice(0, 80);
+  prefs.stocks = $("pStocks").value.trim().slice(0, 120); prefs.topics = $("pTopics").value.trim().slice(0, 200);
+  savePrefs(); say("sys", "Preferences saved."); log("Preferences saved", "SYS");
+});
+$("openSettings").addEventListener("click", () => { $("settingsPanel").scrollIntoView({ behavior: "smooth", block: "start" }); setTimeout(() => $("apiKey").focus(), 400); });
+
+/* ---------- usage meter ---------- */
+const todayKey = () => new Date().toDateString();
+let spend = { day: todayKey(), usd: 0, tokens: 0, priced: true };
+try { const c = JSON.parse(lsGet("jarvis-cost") || "{}"); if (c.day === todayKey()) spend = { ...spend, ...c }; } catch {}
+function showSpend() { $("costNote").textContent = spend.priced ? `~$${spend.usd.toFixed(3)} today` : `${(spend.tokens / 1000).toFixed(1)}k tokens today`; }
+function addCost(u, model) {
+  if (!u) return;
+  const inT = u.input_tokens || u.prompt_tokens || 0, outT = u.output_tokens || u.completion_tokens || 0;
+  spend.tokens += inT + outT;
+  const p = PRICES[model];
+  if (p) spend.usd += inT * p.in + outT * p.out + ((u.server_tool_use && u.server_tool_use.web_search_requests) || 0) * p.search;
+  else spend.priced = false;
+  lsSet("jarvis-cost", JSON.stringify(spend)); showSpend();
+}
+showSpend();
+
+function say(who, text) {
+  const d = document.createElement("div"); d.className = "msg " + who; d.textContent = text;
+  $("chat").append(d); $("chat").scrollTop = $("chat").scrollHeight; return d;
+}
+function localISO(ms) { const d = new Date(ms); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${fmt(ms)}`; }
+function nowLine() {
+  const d = new Date(), tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "local";
+  return `${d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}, ${fmt(d.getTime())} (${tz})`;
+}
+function systemPrompt() {
+  return `You are JARVIS, the user's personal assistant: calm, quick, polite, a little dry and witty, like a refined British butler.${prefs.name ? " The user's name is " + prefs.name + "." : ""}${prefs.city ? " The user lives in " + prefs.city + "." : ""}
+Current local time: ${nowLine()}.
+You can: set alarms, reminders and timers (add_item, list_items, remove_item), control Spotify (spotify_control, now_playing), change the computer volume (set_volume), check school assignments and deadlines (get_school_tasks), and search the web for news, stock prices, weather and facts (web_search).
+Rules:
+- Replies are spoken aloud: 1-4 short sentences, plain text, no markdown, no lists, no URLs.
+- Resolve relative times ("in 10 minutes", "tomorrow at 7") from the current local time. If an alarm has no time, ask one short question.
+- For news or stocks, search first, then say what happened and how fresh it is.${stockList().length ? " The user follows " + stockList().join(", ") + "." : ""}${topicList().length ? " Their news topics: " + topicList().join(", ") + "." : ""} A "briefing" covers all of those briefly.
+- Never tell the user to buy, sell or avoid a stock. Report facts and say decisions are theirs. On politics, describe events neutrally.`;
+}
+const obj = (props = {}, req = []) => ({ type: "object", properties: props, required: req });
+const TOOLS = [
+  { name: "add_item", description: "Set an alarm (rings loudly), reminder (gentle nudge) or timer at a local date and time.",
+    schema: obj({ kind: { type: "string", enum: ["alarm", "reminder", "timer"] }, title: { type: "string" }, datetime: { type: "string", description: "Local time as YYYY-MM-DDTHH:MM" } }, ["kind", "title", "datetime"]) },
+  { name: "list_items", description: "List upcoming alarms, reminders and timers with ids.", schema: obj() },
+  { name: "remove_item", description: "Delete an alarm, reminder or timer by id from list_items.", schema: obj({ id: { type: "string" } }, ["id"]) },
+  { name: "spotify_control", description: "Control the user's Spotify playback.", schema: obj({ action: { type: "string", enum: ["next", "pause", "play"] } }, ["action"]) },
+  { name: "now_playing", description: "Get the song currently playing on Spotify.", schema: obj() },
+  { name: "get_school_tasks", description: "Get the user's upcoming school assignments and deadlines (from Google Classroom and school email): course, title, due date.", schema: obj() },
+  { name: "set_volume", description: "Change the computer's system volume. Each step is about 2%. Use mute to toggle mute.", schema: obj({ action: { type: "string", enum: ["up", "down", "mute"] }, steps: { type: "integer", description: "1-25, default 5" } }, ["action"]) }
+].map(t => ({ ...t, run: inp => runTool(t.name, inp) }));
+async function runTool(name, inp) {
+  inp = inp || {};
+  if (name === "add_item") {
+    const kind = ["alarm", "reminder", "timer"].includes(inp.kind) ? inp.kind : "reminder";
+    const at = parseLocal(String(inp.datetime || ""));
+    if (isNaN(at)) return { error: "datetime must be YYYY-MM-DDTHH:MM" };
+    if (at <= Date.now()) return { error: "That time is in the past." };
+    const title = String(inp.title || "Reminder").slice(0, 120);
+    addItem(kind, title, at); log(`${title} ${whenWords(at)}`, "SET");
+    return { ok: true, set: `${kind} "${title}" at ${localISO(at)}` };
+  }
+  if (name === "list_items") return upcoming().map(i => ({ id: i.id, kind: i.kind, title: i.title, datetime: localISO(i.at) }));
+  if (name === "remove_item") {
+    const before = items.length; items = items.filter(i => i.id !== String(inp.id)); save(); render();
+    return before === items.length ? { error: "No item with that id" } : { ok: true };
+  }
+  if (name === "spotify_control") {
+    if (!spTok) return { error: "Spotify is not connected." };
+    await spControl(["next", "pause", "play"].includes(inp.action) ? inp.action : "play"); return { ok: true };
+  }
+  if (name === "get_school_tasks") {
+    if (!schoolReady) return { error: "School emails aren't connected yet." };
+    return upcomingSchool().map(t => ({ course: t.course, title: t.title, due: typeof t.due === "number" ? localISO(t.due) : (t.dueText || "no due date"), detail: t.detail }));
+  }
+  if (name === "set_volume") {
+    const action = ["up", "down", "mute"].includes(inp.action) ? inp.action : "up";
+    const ok = await changeVolume(action, Math.max(1, Math.min(25, Number(inp.steps) || 5)));
+    return ok ? { ok: true } : { error: "Volume control needs Jarvis to be started with jarvis_server.py" };
+  }
+  if (name === "now_playing") {
+    if (!spTok) return { error: "Spotify is not connected." };
+    return $("npBox").hidden ? { playing: false } : { song: $("npSong").textContent, artist: $("npArtist").textContent, playing: spPlaying };
+  }
+  return { error: "Unknown tool" };
+}
+
+/* ---------- Claude (Anthropic Messages API) ---------- */
+const CLAUDE_SEARCH = [
+  { type: "web_search_20250305", name: "web_search" },
+  { type: "web_search_20260209", name: "web_search", allowed_callers: ["direct"] }
+];
+let searchSetup = Math.min(CLAUDE_SEARCH.length - 1, Number(lsGet("jarvis-search-setup") || 0) || 0);
+async function claudePost(body, search, maxUses) {
+  const model = currentModel();
+  for (let v = search ? searchSetup : 0; v < (search ? CLAUDE_SEARCH.length : 1); v++) {
+    const tools = [...(search ? [{ ...CLAUDE_SEARCH[v], max_uses: maxUses }] : []), ...(body.tools || [])];
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+      body: JSON.stringify({ ...body, model, tools })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) {
+      if (search && v !== searchSetup) { searchSetup = v; lsSet("jarvis-search-setup", String(v)); }
+      addCost(j.usage, model); return j;
+    }
+    const msg = (j.error && j.error.message) || "HTTP " + r.status;
+    console.warn("Claude API error", r.status, msg);
+    if (search && r.status === 400 && /web.?search|server_tool|not supported|allowed_callers/i.test(msg) && v < CLAUDE_SEARCH.length - 1) continue;
+    const e = new Error(msg); e.status = r.status; throw e;
+  }
+}
+async function claudeAgent({ system, messages, tools, search, maxUses, stopTool, force, onSearch, maxTokens }) {
+  const msgs = messages.map(m => ({ role: m.role, content: m.content }));
+  const ctools = tools.map(t => ({ name: t.name, description: t.description, input_schema: t.schema }));
+  const sources = new Map();
+  for (let round = 0; round < 10; round++) {
+    const body = { max_tokens: maxTokens, system, messages: msgs, tools: ctools };
+    if (force) body.tool_choice = { type: "tool", name: force };
+    const j = await claudePost(body, search, maxUses);
+    const content = j.content || [];
+    for (const b of content) {
+      if (b.type === "server_tool_use" && b.input && b.input.query && onSearch) onSearch(b.input.query);
+      if (b.type === "text" && Array.isArray(b.citations)) for (const c of b.citations) if (c.url) sources.set(c.url, c.title || c.url);
+      if (b.type === "web_search_tool_result" && Array.isArray(b.content)) for (const x of b.content.slice(0, 2)) if (x.url && !sources.has(x.url)) sources.set(x.url, x.title || x.url);
+    }
+    msgs.push({ role: "assistant", content });
+    const stop = stopTool && content.find(b => b.type === "tool_use" && b.name === stopTool);
+    if (stop) return { stop: stop.input || {}, text: "", sources };
+    if (j.stop_reason === "pause_turn") continue;
+    if (j.stop_reason === "tool_use") {
+      const results = [];
+      for (const b of content) if (b.type === "tool_use") {
+        const t = tools.find(t => t.name === b.name);
+        let out; try { out = t && t.run ? await t.run(b.input) : { error: "Unknown tool" }; } catch (e) { out = { error: String(e.message || e) }; }
+        results.push({ type: "tool_result", tool_use_id: b.id, content: JSON.stringify(out) });
+      }
+      msgs.push({ role: "user", content: results });
+      continue;
+    }
+    const text = content.filter(b => b.type === "text").map(b => b.text).join("").trim();
+    if (stopTool && round < 3) { msgs.push({ role: "user", content: `Please call the ${stopTool} tool now with what you found.` }); continue; }
+    return { stop: null, text, sources };
+  }
+  return { stop: null, text: "", sources };
+}
+
+/* ---------- OpenAI (Responses API) ---------- */
+async function openaiAgent({ system, messages, tools, search, stopTool, force, onSearch, maxTokens }) {
+  const model = currentModel();
+  const otools = [...(search ? [{ type: "web_search" }] : []), ...tools.map(t => ({ type: "function", name: t.name, description: t.description, parameters: t.schema, strict: false }))];
+  let input = messages.map(m => ({ role: m.role, content: m.content })), prev = null;
+  const sources = new Map();
+  for (let round = 0; round < 10; round++) {
+    const body = { model, instructions: system, input, tools: otools, max_output_tokens: Math.max(maxTokens, 4000) };
+    if (prev) body.previous_response_id = prev;
+    if (force) body.tool_choice = { type: "function", name: force };
+    const r = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + apiKey }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { const e = new Error((j.error && j.error.message) || "HTTP " + r.status); e.status = r.status; e.code = j.error && j.error.code; throw e; }
+    addCost(j.usage, model);
+    prev = j.id;
+    const out = j.output || [];
+    let text = "";
+    for (const it of out) {
+      if (it.type === "web_search_call" && onSearch) onSearch((it.action && it.action.query) || "the web");
+      if (it.type === "message") for (const c of it.content || []) if (c.type === "output_text") {
+        text += c.text || "";
+        for (const an of c.annotations || []) if (an.type === "url_citation" && an.url) sources.set(an.url, an.title || an.url);
+      }
+    }
+    const calls = out.filter(it => it.type === "function_call");
+    const stop = stopTool && calls.find(c => c.name === stopTool);
+    if (stop) { let a = {}; try { a = JSON.parse(stop.arguments || "{}"); } catch {} return { stop: a, text: "", sources }; }
+    if (calls.length) {
+      input = [];
+      for (const c of calls) {
+        const t = tools.find(t => t.name === c.name); let a = {}; try { a = JSON.parse(c.arguments || "{}"); } catch {}
+        let res; try { res = t && t.run ? await t.run(a) : { error: "Unknown tool" }; } catch (e) { res = { error: String(e.message || e) }; }
+        input.push({ type: "function_call_output", call_id: c.call_id, output: JSON.stringify(res) });
+      }
+      continue;
+    }
+    if (stopTool && round < 3) { input = [{ role: "user", content: `Please call the ${stopTool} tool now with what you found.` }]; continue; }
+    return { stop: null, text: text.trim(), sources };
+  }
+  return { stop: null, text: "", sources };
+}
+
+/* One entry point for both providers. tools: [{name, description, schema, run?}] */
+function agent(opts) {
+  const o = { tools: [], search: false, maxUses: 3, stopTool: null, force: null, onSearch: null, maxTokens: 1500, ...opts };
+  return provider() === "openai" ? openaiAgent(o) : claudeAgent(o);
+}
+function friendlyError(e) {
+  const p = providerName(), m = String(e.message || "");
+  if (e.status === 401) return `Your ${p} API key was rejected. Remove it in Settings and paste a new one.`;
+  if (/credit|insufficient_quota|billing/i.test(m + (e.code || ""))) return `Your ${p} account is out of credit. Add credit in your ${p} billing settings.`;
+  if (e.status === 404 || /model/i.test(m) && e.status === 400) return `${p} doesn't recognise the model "${currentModel()}". Pick another one in Settings.`;
+  if (e.status === 429) return "Too many requests. Give me a moment and ask again.";
+  if (e.status === 529 || e.status === 503) return `${p} is busy right now. Try again in a minute.`;
+  return "Couldn't reach my brain: " + m;
+}
+
+async function ask(text) {
+  text = (text || "").trim();
+  if (!text || brainBusy) return;
+  if (!apiKey) { say("sys", "Add an API key in Settings first."); return; }
+  brainBusy = true; $("sendBtn").disabled = true; $("reactor").classList.add("busy");
+  say("me", text);
+  const bubble = say("ai", "Thinking…");
+  try {
+    const res = await agent({ system: systemPrompt(), messages: [...convo.slice(-8), { role: "user", content: text }], tools: TOOLS, search: true, maxUses: 3,
+      onSearch: q => { bubble.textContent = `Searching: ${q}…`; } });
+    const answer = res.text || "Done.";
+    bubble.textContent = answer;
+    if (res.sources.size) {
+      const src = document.createElement("span"); src.className = "src"; src.textContent = "Sources: ";
+      [...res.sources].slice(0, 4).forEach(([url, title], i) => {
+        if (i) src.append(" · ");
+        const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener"; a.textContent = (title || url).slice(0, 40); src.append(a);
+      });
+      bubble.append(src);
+    }
+    convo.push({ role: "user", content: text }, { role: "assistant", content: answer });
+    speak(answer);
+  } catch (e) {
+    bubble.className = "msg sys"; bubble.textContent = friendlyError(e);
+  } finally {
+    brainBusy = false; $("sendBtn").disabled = false; $("reactor").classList.remove("busy");
+  }
+}
+$("askForm").addEventListener("submit", e => { e.preventDefault(); armAudio(); const v = $("q").value; $("q").value = ""; ask(v); });
+$("chips").addEventListener("click", e => { if (e.target.classList.contains("chip")) { armAudio(); ask(e.target.textContent); } });
+fillSettings();
+
+/* ---------- voice input (Chrome speech recognition) ---------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (!SR) { $("micBtn").hidden = true; }
+else {
+  let rec = null;
+  $("micBtn").addEventListener("click", () => {
+    armAudio();
+    if (rec) { rec.stop(); return; }
+    rec = new SR(); rec.lang = "en-US"; rec.interimResults = true; rec.maxAlternatives = 1;
+    $("micBtn").classList.add("on");
+    try { speechSynthesis.cancel(); } catch {}
+    rec.onresult = ev => { const t = Array.from(ev.results).map(r => r[0].transcript).join(""); $("q").value = t; if (ev.results[ev.results.length - 1].isFinal) { $("q").value = ""; ask(t); } };
+    rec.onerror = ev => { if (ev.error === "not-allowed") say("sys", "Microphone access was blocked. Allow it from the icon in the address bar."); };
+    rec.onend = () => { rec = null; $("micBtn").classList.remove("on"); };
+    rec.start();
+  });
+}
+
+/* ---------- automatic briefing ---------- */
+const BRIEF_SLOTS = [[7, 30], [18, 30]];
+let brief = null; try { brief = JSON.parse(lsGet("jarvis-brief") || "null"); } catch {}
+let briefBusy = false, briefRetryAt = 0;
+function lastSlot(now = new Date()) {
+  let best = 0;
+  for (const dayOff of [0, -1]) for (const [h, m] of BRIEF_SLOTS) {
+    const d = new Date(now); d.setDate(d.getDate() + dayOff); d.setHours(h, m, 0, 0);
+    if (d <= now && d.getTime() > best) best = d.getTime();
+  }
+  return best;
+}
+const mkEl = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = String(text); return e; };
+const arr = v => Array.isArray(v) ? v : [];
+function toastBox() { let b = document.querySelector(".toasts"); if (!b) { b = mkEl("div", "toasts"); document.body.append(b); } return b; }
+function renderBrief() {
+  if (!brief) return;
+  const d = new Date(brief.at);
+  $("briefTitle").textContent = (d.getHours() < 12 ? "Morning" : d.getHours() < 17 ? "Afternoon" : "Evening") + " briefing";
+  $("briefTime").textContent = (d.toDateString() === new Date().toDateString() ? "Today " : d.toLocaleDateString("en-GB", { weekday: "short" }) + " ") + fmt(brief.at);
+  const body = $("briefBody"); body.textContent = "";
+  const mk = arr(brief.markets);
+  if (mk.length) {
+    const g = mkEl("div", "mk");
+    for (const m of mk.slice(0, 6)) { const t = mkEl("div", "tile"); t.append(mkEl("b", "", m.symbol || ""), mkEl("span", "chg " + (["up", "down"].includes(m.dir) ? m.dir : "flat"), m.change || "n/a"), mkEl("small", "", m.note || "")); g.append(t); }
+    body.append(g);
+  }
+  for (const st of arr(brief.stories).slice(0, 8)) {
+    const e = mkEl("div", "story"); e.append(mkEl("div", "tag", st.tag || "News"), mkEl("h3", "", st.headline || ""));
+    if (st.detail) e.append(mkEl("p", "", st.detail));
+    body.append(e);
+  }
+  const src = arr(brief.sources);
+  const foot = mkEl("div", "bsrc", "Facts only, not investment advice." + (src.length ? " Sources: " : ""));
+  src.slice(0, 5).forEach(([url, title], i) => { if (i) foot.append(" · "); const a = mkEl("a", "", (title || url).slice(0, 36)); a.href = url; a.target = "_blank"; a.rel = "noopener"; foot.append(a); });
+  body.append(foot);
+}
+function briefToast() {
+  document.querySelectorAll(".toast.brief").forEach(t => t.remove());
+  const t = mkEl("div", "toast brief"); t.setAttribute("role", "status");
+  t.append(mkEl("div", "eyebrow", $("briefTitle").textContent + " ready"));
+  const ul = mkEl("ul");
+  const mk = arr(brief.markets).map(m => `${m.symbol} ${m.change}`).join(" · ");
+  if (mk) ul.append(mkEl("li", "", mk));
+  for (const st of arr(brief.stories).slice(0, 3)) ul.append(mkEl("li", "", `${st.tag}: ${st.headline}`));
+  const acts = mkEl("div", "acts");
+  const open = mkEl("button", "btn ghost", "Read briefing"); open.type = "button";
+  const ok = mkEl("button", "btn", "Got it"); ok.type = "button";
+  open.onclick = () => { t.remove(); $("briefPanel").scrollIntoView({ behavior: "smooth", block: "start" }); };
+  ok.onclick = () => t.remove();
+  acts.append(open, ok); t.append(ul, acts); toastBox().append(t);
+  setTimeout(() => t.remove(), 60000);
+}
+const SAVE_BRIEFING = { name: "save_briefing", description: "Save the finished briefing so it appears on the user's screen. Call exactly once, after searching.",
+  schema: { type: "object", properties: {
+    markets: { type: "array", items: { type: "object", properties: { symbol: { type: "string" }, change: { type: "string", description: "e.g. -4.2% or n/a" }, dir: { type: "string", enum: ["up", "down", "flat"] }, note: { type: "string", description: "price, session and a short factual reason" } }, required: ["symbol", "change", "dir", "note"] } },
+    stories: { type: "array", items: { type: "object", properties: { tag: { type: "string", description: "which news topic this belongs to" }, headline: { type: "string" }, detail: { type: "string" } }, required: ["tag", "headline", "detail"] } },
+    spoken: { type: "string", description: "2-3 sentence spoken summary" } },
+    required: ["markets", "stories", "spoken"] } };
+const BRIEF_PROMPT = () => `Prepare the user's briefing. Current local time: ${nowLine()}.${prefs.city ? " The user lives in " + prefs.city + "." : ""}
+Search the web (up to 5 searches) for:
+1. The latest moves for these stocks: ${stockList().join(", ") || "the S&P 500 (SPY)"}: % change, price, and a short factual reason if reported. Say which session the figures are from.
+2. Top news from the last 24 hours on these topics, 1-2 stories each: ${topicList().join("; ")}.
+When you have the facts, call the save_briefing tool once with everything (don't write the briefing as text). Use each topic's name as the story tag. Headlines under 90 characters. The spoken summary is 2-3 sentences in Jarvis's voice, starting with a greeting for the time of day${prefs.name ? " and the user's name, " + prefs.name : ""}.
+Use "n/a" for anything you couldn't verify. Facts only: never advise buying, selling or avoiding a stock. Describe political news neutrally.`;
+async function runBriefing() {
+  if (!apiKey || briefBusy) return;
+  briefBusy = true; $("briefNow").disabled = true; $("briefTime").textContent = "Updating…"; $("reactor").classList.add("busy");
+  log("Preparing briefing", "BRIEF");
+  try {
+    const res = await agent({ system: "You are JARVIS, a concise, factual personal assistant.", messages: [{ role: "user", content: BRIEF_PROMPT() }],
+      tools: [SAVE_BRIEFING], search: true, maxUses: 5, stopTool: "save_briefing", maxTokens: 4000 });
+    let data = res.stop;
+    if (!data) { const t = res.text || "", a = t.indexOf("{"), z = t.lastIndexOf("}"); if (a >= 0 && z > a) { try { data = JSON.parse(t.slice(a, z + 1)); } catch {} } }
+    const sources = res.sources;
+    if (!data) throw new Error("Jarvis didn't finish the briefing. Click Refresh to try again.");
+    brief = { at: Date.now(), markets: arr(data.markets), stories: arr(data.stories), spoken: String(data.spoken || ""), sources: [...sources] };
+    lsSet("jarvis-brief", JSON.stringify(brief));
+    renderBrief(); briefToast(); chirp();
+    speak(brief.spoken || "Your briefing is ready.");
+    log("Briefing ready", "BRIEF");
+  } catch (e) {
+    briefRetryAt = Date.now() + 30 * 60e3;
+    $("briefTime").textContent = "Update failed";
+    log(e.status === 401 ? "API key rejected" : "Briefing failed: " + e.message + " (retrying in 30 min)", "BRIEF");
+    const body = $("briefBody"); body.textContent = "";
+    const box = mkEl("div", "empty"); box.style.color = "var(--red)";
+    box.textContent = "Briefing failed. " + providerName() + " said: " + (e.message || "unknown error") + (/web.?search/i.test(e.message || "") ? " — Web search may be turned off for your API account. Check your provider's console settings, or try another model in Settings." : "");
+    body.append(box);
+  } finally {
+    briefBusy = false; $("briefNow").disabled = false; if (!brainBusy) $("reactor").classList.remove("busy");
+    if (brief && $("briefTime").textContent === "Updating…") renderBrief();
+  }
+}
+$("briefNow").addEventListener("click", () => { armAudio(); if (!apiKey) { say("sys", "Add an API key in Settings first, then I can fetch your briefing."); return; } runBriefing(); });
+function briefCheck() {
+  if (!apiKey || briefBusy || Date.now() < briefRetryAt) return;
+  if (!brief || brief.at < lastSlot()) runBriefing();
+}
+/* ---------- school: Google Classroom + university email via Gmail ---------- */
+const SCHOOL_EVERY = 2 * 3600e3;
+let school = { tasks: [], processed: [], lastRun: 0 };
+try { school = Object.assign(school, JSON.parse(lsGet("jarvis-school") || "{}")); } catch {}
+let schoolBusy = false, schoolReady = false;
+const saveSchool = () => lsSet("jarvis-school", JSON.stringify(school));
+const api = (path, opts = {}) => fetch(path, { ...opts, headers: { "X-Jarvis": "1", "Content-Type": "application/json", ...(opts.headers || {}) } });
+function upcomingSchool() {
+  const now = Date.now();
+  return arr(school.tasks).filter(t => t && t.title && (typeof t.due !== "number" ? (now - (t.added || now) < 14 * 864e5) : t.due > now - 6 * 3600e3))
+    .sort((a, b) => (typeof a.due === "number" ? a.due : 9e15) - (typeof b.due === "number" ? b.due : 9e15));
+}
+function dayWord(d) {
+  const t = new Date(), tm = new Date(); tm.setDate(t.getDate() + 1);
+  if (d.toDateString() === t.toDateString()) return "Today";
+  if (d.toDateString() === tm.toDateString()) return "Tomorrow";
+  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+}
+function renderSchool() {
+  if (!schoolReady) return;
+  const list = upcomingSchool(), body = $("schoolBody");
+  $("schoolCount").textContent = `${list.length} upcoming`;
+  body.textContent = "";
+  if (!list.length) { body.append(mkEl("div", "empty", school.lastRun ? "Nothing due. New Classroom assignments will appear here." : "Checking your school emails…")); return; }
+  for (const t of list.slice(0, 15)) {
+    const row = mkEl("div", "srow"), due = typeof t.due === "number" ? new Date(t.due) : null;
+    const tm = mkEl("time", due && t.due - Date.now() < 48 * 3600e3 ? "soon" : "", due ? `${dayWord(due)} ${fmt(t.due)}` : (t.dueText || "No due date"));
+    const tx = mkEl("div", "t"); tx.append(mkEl("span", "course", t.course || "Class"), document.createTextNode(t.title));
+    row.append(tm, tx);
+    if (t.link && /^https:\/\//.test(t.link)) { const a = mkEl("a", "", "Open"); a.href = t.link; a.target = "_blank"; a.rel = "noopener"; row.append(a); } else row.append(mkEl("span"));
+    body.append(row);
+  }
+}
+function schoolReminders(t) {
+  if (typeof t.due !== "number") return;
+  const eve = new Date(t.due); eve.setDate(eve.getDate() - 1); eve.setHours(19, 0, 0, 0);
+  const day = new Date(t.due); day.setHours(8, 0, 0, 0);
+  const dayAt = new Date(t.due).getHours() < 11 ? t.due - 3 * 3600e3 : day.getTime();
+  const label = `${t.course || "Class"} - ${t.title}`;
+  if (eve.getTime() > Date.now()) addItem("reminder", "Due tomorrow: " + label, eve.getTime());
+  if (dayAt > Date.now()) addItem("reminder", "Due today: " + label, dayAt);
+}
+function schoolToast(fresh) {
+  const box = mkEl("div", "toast school"); box.setAttribute("role", "status");
+  box.append(mkEl("div", "eyebrow", fresh.length === 1 ? "New school task" : `${fresh.length} new school tasks`));
+  const ul = mkEl("ul");
+  for (const t of fresh.slice(0, 4)) ul.append(mkEl("li", "", `${t.course || "Class"}: ${t.title}` + (typeof t.due === "number" ? ` (due ${dayWord(new Date(t.due)).toLowerCase()} ${fmt(t.due)})` : "")));
+  const acts = mkEl("div", "acts");
+  const open = mkEl("button", "btn ghost", "See all"); open.type = "button";
+  const ok = mkEl("button", "btn", "Got it"); ok.type = "button";
+  open.onclick = () => { box.remove(); $("schoolPanel").scrollIntoView({ behavior: "smooth", block: "start" }); };
+  ok.onclick = () => box.remove();
+  acts.append(open, ok); box.append(ul, acts); toastBox().append(box);
+  const f = fresh[0];
+  speak(fresh.length === 1 ? `New assignment for ${f.course || "class"}: ${f.title}.` : `You have ${fresh.length} new school tasks.`);
+}
+async function runSchool() {
+  if (schoolBusy || !apiKey) return;
+  schoolBusy = true; $("schoolNow").disabled = true; $("schoolCount").textContent = "checking…";
+  try {
+    const r = await api("/api/school/emails"); const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
+    const seen = new Set(arr(school.processed));
+    const fresh = arr(j.emails).filter(e => !seen.has(e.id));
+    let added = [];
+    if (fresh.length) {
+      const known = upcomingSchool().map(t => `${t.course} | ${t.title} | ${typeof t.due === "number" ? localISO(t.due) : t.dueText || ""}`).join("\n") || "(none)";
+      const mails = fresh.slice(0, 25).map((e, i) => `#${i + 1} id=${e.id}\nFrom: ${e.from}\nDate: ${e.date}\nSubject: ${e.subject}\nLink: ${e.link || "-"}\n${e.text}`).join("\n\n---\n\n");
+      const prompt = `Current local time: ${nowLine()}.
+Below are new emails from the user's Google Classroom and school mail. Extract real tasks: new assignments, questions, quizzes, exams, submissions, deadlines or required actions. Skip "Graded"/returned work, comments, materials with no action, announcements with no action, newsletters and marketing. Skip tasks already in the known list (same class and title), unless the email changes their due date, in which case include it with the new date.
+Known tasks:
+${known}
+
+Call the save_tasks tool with the tasks (an empty list if there are none). For due, use YYYY-MM-DDTHH:MM local time, 23:59 if only a date is given, or empty if there is no due date.
+
+Emails:
+${mails}`;
+      const res = await agent({ system: "You extract tasks from emails.", messages: [{ role: "user", content: prompt }], force: "save_tasks", stopTool: "save_tasks", maxTokens: 3000,
+        tools: [{ name: "save_tasks", description: "Save the tasks found in the emails.", schema: { type: "object", properties: { tasks: { type: "array", items: { type: "object", properties: {
+          source_id: { type: "string" }, course: { type: "string" }, title: { type: "string" }, due: { type: "string" }, dueText: { type: "string" }, link: { type: "string" }, detail: { type: "string" } },
+          required: ["source_id", "course", "title", "due", "dueText", "link", "detail"] } } }, required: ["tasks"] } }] });
+      const found = res.stop ? arr(res.stop.tasks) : [];
+      for (const f of arr(found)) {
+        if (!f || !f.title) continue;
+        const due = parseLocal(String(f.due || ""));
+        const task = { id: String(f.source_id || "") + ":" + String(f.title).slice(0, 40), course: String(f.course || "Class").slice(0, 60), title: String(f.title).slice(0, 140),
+          due: isNaN(due) ? null : due, dueText: String(f.dueText || ""), link: String(f.link || ""), detail: String(f.detail || ""), added: Date.now() };
+        const same = arr(school.tasks).findIndex(t => t.course === task.course && t.title.toLowerCase() === task.title.toLowerCase());
+        if (same >= 0) { if (task.due && task.due !== school.tasks[same].due) { school.tasks[same].due = task.due; schoolReminders(school.tasks[same]); } continue; }
+        school.tasks.push(task); added.push(task); schoolReminders(task);
+      }
+      fresh.forEach(e => seen.add(e.id));
+      school.processed = [...seen].slice(-500);
+    }
+    school.tasks = arr(school.tasks).filter(t => typeof t.due !== "number" ? Date.now() - (t.added || 0) < 30 * 864e5 : t.due > Date.now() - 7 * 864e5);
+    school.lastRun = Date.now(); saveSchool();
+    renderSchool();
+    if (added.length) { schoolToast(added); chirp(); log(`${added.length} new school task${added.length > 1 ? "s" : ""}`, "SCHOOL"); }
+    else log("School emails checked: nothing new", "SCHOOL");
+  } catch (e) {
+    $("schoolCount").textContent = "check failed";
+    log("School check failed: " + e.message, "SCHOOL");
+    school.lastRun = Date.now() - SCHOOL_EVERY + 30 * 60e3; saveSchool();
+  } finally {
+    schoolBusy = false; $("schoolNow").disabled = false;
+    if ($("schoolCount").textContent === "checking…") renderSchool();
+  }
+}
+async function initSchool() {
+  let st = null;
+  try { const r = await api("/api/school/status"); if (r.ok) st = await r.json(); } catch {}
+  if (!st) { $("schoolCount").textContent = "needs jarvis_server.py"; $("schoolBody").textContent = ""; $("schoolBody").append(mkEl("div", "empty", "Start Jarvis with python jarvis_server.py to see your school tasks here.")); return; }
+  $("schoolSetup").hidden = st.configured; $("schoolNow").hidden = !st.configured;
+  if (!st.configured) { $("schoolCount").textContent = "not connected"; return; }
+  schoolReady = true; renderSchool();
+  if (!apiKey) { $("schoolBody").prepend(mkEl("div", "empty", "Add an AI key in Settings so I can read your school emails.")); return; }
+  if (Date.now() - (school.lastRun || 0) > SCHOOL_EVERY) runSchool();
+}
+$("gSave").addEventListener("click", async () => {
+  $("gErr").textContent = "";
+  const body = JSON.stringify({ address: $("gAddr").value.trim(), app_password: $("gPass").value.trim(), school_address: $("gSchool").value.trim() });
+  $("gSave").disabled = true; $("gSave").textContent = "Testing…";
+  try {
+    const r = await api("/api/school/config", { method: "POST", body }); const j = await r.json().catch(() => ({}));
+    if (!r.ok) { $("gErr").textContent = j.error || "Couldn't connect."; return; }
+    $("gPass").value = ""; log("Gmail connected", "SCHOOL"); school.lastRun = 0; saveSchool(); initSchool();
+  } catch { $("gErr").textContent = "Jarvis server isn't running. Start it with python jarvis_server.py."; }
+  finally { $("gSave").disabled = false; $("gSave").textContent = "Connect"; }
+});
+$("schoolNow").addEventListener("click", () => { armAudio(); runSchool(); });
+setInterval(() => { renderSchool(); if (schoolReady && apiKey && Date.now() - (school.lastRun || 0) > SCHOOL_EVERY) runSchool(); }, 60000);
+setTimeout(initSchool, 1500);
+
+renderBrief();
+setTimeout(briefCheck, 3000);
+setInterval(briefCheck, 60000);
+$("saveKey").addEventListener("click", () => setTimeout(briefCheck, 500));
+
+/* ---------- power core: an original glowing, spinning energy core ---------- */
+function makeCore(cv) {
+  const ctx = cv.getContext("2d");
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const COL = { idle: [79, 214, 255], busy: [255, 181, 71], listen: [255, 107, 107] };
+  let mode = "idle", flashT = 0, a1 = 0, a2 = 0, a3 = 0, last = performance.now();
+  let rgb = COL.idle.slice();
+  function size() { const d = Math.min(2, window.devicePixelRatio || 1), r = cv.getBoundingClientRect(); cv.width = Math.round(r.width * d) || 168; cv.height = Math.round(r.height * d) || 168; }
+  size(); addEventListener("resize", size);
+  const c = (k, al) => `rgba(${rgb[0] | 0},${rgb[1] | 0},${rgb[2] | 0},${al})`;
+  function arc(r, start, len, w, al, blur) { ctx.beginPath(); ctx.arc(0, 0, r, start, start + len); ctx.lineWidth = w; ctx.strokeStyle = c(0, al); ctx.shadowBlur = blur; ctx.shadowColor = c(0, 1); ctx.stroke(); }
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    const target = COL[mode]; for (let i = 0; i < 3; i++) rgb[i] += (target[i] - rgb[i]) * Math.min(1, dt * 4);
+    const speed = reduce ? 0.15 : mode === "busy" ? 3.2 : mode === "listen" ? 2 : 1;
+    a1 += dt * 0.35 * speed; a2 -= dt * 0.8 * speed; a3 += dt * 1.9 * speed;
+    flashT = Math.max(0, flashT - dt * 2.2);
+    const W = cv.width, H = cv.height, R = Math.min(W, H) / 2, s = R / 100;
+    const pulse = reduce ? 0.85 : 0.75 + 0.25 * Math.sin(now / (mode === "busy" ? 180 : 650));
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H);
+    ctx.translate(W / 2, H / 2); ctx.lineCap = "round";
+    const halo = ctx.createRadialGradient(0, 0, 0, 0, 0, R);
+    halo.addColorStop(0, c(0, 0.35 + flashT * 0.4)); halo.addColorStop(0.45, c(0, 0.12)); halo.addColorStop(1, c(0, 0));
+    ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
+    ctx.save(); ctx.rotate(a1);
+    for (let i = 0; i < 36; i++) { const ang = i / 36 * Math.PI * 2, long = i % 3 === 0; ctx.beginPath(); ctx.moveTo(Math.cos(ang) * 86 * s, Math.sin(ang) * 86 * s); ctx.lineTo(Math.cos(ang) * (long ? 78 : 82) * s, Math.sin(ang) * (long ? 78 : 82) * s); ctx.lineWidth = (long ? 2.2 : 1.2) * s; ctx.strokeStyle = c(0, long ? 0.9 : 0.45); ctx.shadowBlur = 6 * s; ctx.shadowColor = c(0, 1); ctx.stroke(); }
+    arc(92 * s, 0, Math.PI * 2, 1 * s, 0.35, 0);
+    ctx.restore();
+    ctx.save(); ctx.rotate(a2);
+    for (let i = 0; i < 5; i++) arc(66 * s, i / 5 * Math.PI * 2, Math.PI * 2 / 5 - 0.32, 5 * s, 0.85, 12 * s);
+    ctx.restore();
+    ctx.save(); ctx.rotate(a3);
+    arc(48 * s, 0, Math.PI * 0.9, 2.5 * s, 0.95, 10 * s); arc(48 * s, Math.PI, Math.PI * 0.6, 2.5 * s, 0.6, 10 * s);
+    for (let i = 0; i < 3; i++) { const ang = i / 3 * Math.PI * 2; ctx.beginPath(); ctx.arc(Math.cos(ang) * 56 * s, Math.sin(ang) * 56 * s, 2.4 * s, 0, Math.PI * 2); ctx.fillStyle = c(0, 1); ctx.shadowBlur = 10 * s; ctx.shadowColor = c(0, 1); ctx.fill(); }
+    ctx.restore();
+    ctx.save(); ctx.rotate(-a1 * 2);
+    ctx.beginPath(); for (let i = 0; i < 6; i++) { const ang = i / 6 * Math.PI * 2; ctx[i ? "lineTo" : "moveTo"](Math.cos(ang) * 32 * s, Math.sin(ang) * 32 * s); } ctx.closePath();
+    ctx.lineWidth = 1.5 * s; ctx.strokeStyle = c(0, 0.7); ctx.shadowBlur = 8 * s; ctx.stroke();
+    ctx.restore();
+    const core = ctx.createRadialGradient(0, 0, 0, 0, 0, 26 * s);
+    core.addColorStop(0, `rgba(255,255,255,${0.95})`); core.addColorStop(0.35, c(0, 0.95 * pulse + flashT * 0.3)); core.addColorStop(1, c(0, 0));
+    ctx.shadowBlur = 30 * s * pulse; ctx.shadowColor = c(0, 1); ctx.fillStyle = core;
+    ctx.beginPath(); ctx.arc(0, 0, (22 + 3 * pulse + flashT * 6) * s, 0, Math.PI * 2); ctx.fill();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+  return { set(m) { mode = COL[m] ? m : "idle"; }, flash() { flashT = 1; } };
+}
+
+const core = makeCore($("coreCv"));
+function syncCore() { core.set($("micBtn").classList.contains("on") ? "listen" : $("reactor").classList.contains("busy") ? "busy" : "idle"); }
+new MutationObserver(syncCore).observe($("reactor"), { attributes: true, attributeFilter: ["class"] });
+new MutationObserver(syncCore).observe($("micBtn"), { attributes: true, attributeFilter: ["class"] });
+const coreTalk = () => { armAudio(); core.flash(); if (!$("micBtn").hidden) $("micBtn").click(); else $("q").focus(); };
+$("coreCv").addEventListener("click", coreTalk);
+$("coreCv").addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); coreTalk(); } });
+
+function fillVoices() {
+  const sel = $("voicePick"); if (!sel || !("speechSynthesis" in window)) return;
+  const list = (speechSynthesis.getVoices() || []).filter(v => /^en/i.test(v.lang)).sort((a, b) => (/en-GB/i.test(b.lang) - /en-GB/i.test(a.lang)) || a.name.localeCompare(b.name));
+  sel.textContent = "";
+  for (const v of list) { const o = document.createElement("option"); o.value = v.name; o.textContent = `${v.name.replace(/^Microsoft |Online \(Natural\) - /g, "")} (${v.lang})`; sel.append(o); }
+  if (jarvisVoice) sel.value = jarvisVoice.name;
+}
+if ($("voicePick")) {
+  fillVoices();
+  $("voicePick").addEventListener("change", e => { try { localStorage.setItem("jarvis-voice", e.target.value); } catch {} jarvisVoice = pickVoice(); speak("Voice updated. At your service."); });
+  $("voiceTest").addEventListener("click", () => { armAudio(); const was = $("voice").checked; $("voice").checked = true; speak("Good evening. All systems are online, and your schedule is clear."); $("voice").checked = was; });
+}
+
+/* ---------- boot ---------- */
+tickClock(); render();
+setInterval(() => { tickClock(); checkDue(); }, 1000);
+setInterval(render, 20000);
+</script>
+</body>
+</html>
