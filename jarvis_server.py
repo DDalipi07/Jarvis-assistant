@@ -24,7 +24,25 @@ from html import unescape
 PORT = 8000
 HOST = "127.0.0.1"  # only this computer can reach it
 HERE = os.path.dirname(os.path.abspath(__file__))
-CONFIG = os.path.join(HERE, "jarvis_config.json")  # your Gmail app password is stored here, on this computer only
+CONFIG = os.path.join(HERE, "jarvis_config.json")  # Gmail settings; the app password inside is encrypted (Windows/macOS)
+ALLOWED_HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}  # blocks "DNS rebinding" tricks from other websites
+
+# Only these sites may be contacted by the page. Even if a library were ever tampered with,
+# it couldn't send your keys anywhere else.
+CSP = "; ".join([
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net",
+    "connect-src 'self' https://api.anthropic.com https://api.openai.com https://accounts.spotify.com "
+    "https://api.spotify.com https://cdn.jsdelivr.net https://storage.googleapis.com",
+    "img-src 'self' data: blob: https://*.scdn.co https://*.spotifycdn.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src https://fonts.gstatic.com",
+    "media-src 'self' blob: mediastream:",
+    "worker-src 'self' blob: https://cdn.jsdelivr.net",
+    "frame-ancestors 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+])
 
 # Windows virtual key codes for the media volume keys
 VK_VOLUME_MUTE = 0xAD
@@ -54,22 +72,88 @@ def press_volume_key(action, steps):
     return False
 
 
+# ---------------- secret storage ----------------
+# Windows: encrypted with DPAPI (only your Windows user account can decrypt it).
+# macOS: stored in the Keychain. Elsewhere: a file only you can read.
+KEYCHAIN_SERVICE = "jarvis-gmail-app-password"
+
+
+def _dpapi(data, protect):
+    import ctypes
+    from ctypes import wintypes
+
+    class BLOB(ctypes.Structure):
+        _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
+
+    buf = ctypes.create_string_buffer(data, len(data))
+    blob_in = BLOB(len(data), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char)))
+    blob_out = BLOB()
+    fn = ctypes.windll.crypt32.CryptProtectData if protect else ctypes.windll.crypt32.CryptUnprotectData
+    if not fn(ctypes.byref(blob_in), None, None, None, None, 0, ctypes.byref(blob_out)):
+        raise OSError("Windows could not encrypt/decrypt the password")
+    try:
+        return ctypes.string_at(blob_out.pbData, blob_out.cbData)
+    finally:
+        ctypes.windll.kernel32.LocalFree(blob_out.pbData)
+
+
+def protect_secret(secret, account):
+    if sys.platform == "win32":
+        import base64
+        return {"app_password_dpapi": base64.b64encode(_dpapi(secret.encode(), True)).decode()}
+    if sys.platform == "darwin":
+        r = subprocess.run(["security", "add-generic-password", "-U", "-a", account, "-s", KEYCHAIN_SERVICE, "-w", secret],
+                           capture_output=True)
+        if r.returncode == 0:
+            return {"app_password_keychain": True}
+    return {"app_password": secret}  # fallback: plain, but the file is made private below
+
+
+def reveal_secret(cfg):
+    if cfg.get("app_password_dpapi"):
+        import base64
+        return _dpapi(base64.b64decode(cfg["app_password_dpapi"]), False).decode()
+    if cfg.get("app_password_keychain"):
+        r = subprocess.run(["security", "find-generic-password", "-a", cfg.get("address", ""), "-s", KEYCHAIN_SERVICE, "-w"],
+                           capture_output=True, text=True)
+        return r.stdout.strip() if r.returncode == 0 else ""
+    return cfg.get("app_password", "")
+
+
+def has_secret(cfg):
+    return bool(cfg.get("app_password_dpapi") or cfg.get("app_password_keychain") or cfg.get("app_password"))
+
+
 # ---------------- school email (Gmail over IMAP) ----------------
 def load_config():
     try:
         with open(CONFIG, encoding="utf-8") as f:
-            return json.load(f)
+            cfg = json.load(f)
     except Exception:
         return {}
+    if cfg.get("app_password") and sys.platform in ("win32", "darwin"):
+        try:  # upgrade an older plain-text config to encrypted storage
+            save_config(cfg["address"], cfg["app_password"], cfg.get("school_address", ""))
+            return load_config()
+        except Exception:
+            pass
+    return cfg
 
 
-def save_config(cfg):
-    with open(CONFIG, "w", encoding="utf-8") as f:
+def save_config(address, app_password, school_address):
+    try:
+        stored = protect_secret(app_password, address)
+    except Exception:
+        stored = {"app_password": app_password}
+    cfg = {"address": address, "school_address": school_address, **stored}
+    tmp = CONFIG + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(cfg, f)
     try:
-        os.chmod(CONFIG, 0o600)
+        os.chmod(tmp, 0o600)
     except Exception:
         pass
+    os.replace(tmp, CONFIG)
 
 
 def gmail_login(address, app_password):
@@ -117,7 +201,7 @@ def fetch_school_emails(cfg, days=21, limit=40):
     school = cfg.get("school_address", "")
     query = f"(from:classroom.google.com OR to:{school} OR deliveredto:{school}) newer_than:{days}d" if school \
         else f"from:classroom.google.com newer_than:{days}d"
-    m = gmail_login(cfg["address"], cfg["app_password"])
+    m = gmail_login(cfg["address"], reveal_secret(cfg))
     try:
         folder = '"[Gmail]/All Mail"'
         typ, boxes = m.list()
@@ -172,9 +256,14 @@ class JarvisHandler(http.server.SimpleHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         return json.loads(self.rfile.read(length) or b"{}")
 
+    def host_ok(self):
+        return self.headers.get("Host", "") in ALLOWED_HOSTS
+
     def from_jarvis(self):
-        # Only the Jarvis page sends this header; other websites can't, so they can't use these endpoints.
-        if self.headers.get("X-Jarvis") == "1":
+        # Only the Jarvis page, opened at 127.0.0.1, sends this header from the right address.
+        # Other websites can't, so they can't use these endpoints.
+        if self.headers.get("X-Jarvis") == "1" and self.host_ok() and \
+                self.headers.get("Origin", f"http://127.0.0.1:{PORT}") in (f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"):
             return True
         self.send_json(403, {"ok": False, "error": "forbidden"})
         return False
@@ -185,11 +274,11 @@ class JarvisHandler(http.server.SimpleHTTPRequestHandler):
                 return
             if self.path == "/api/school/status":
                 cfg = load_config()
-                return self.send_json(200, {"configured": bool(cfg.get("app_password")), "address": cfg.get("address", ""),
+                return self.send_json(200, {"configured": has_secret(cfg), "address": cfg.get("address", ""),
                                             "school_address": cfg.get("school_address", "")})
             if self.path == "/api/school/emails":
                 cfg = load_config()
-                if not cfg.get("app_password"):
+                if not has_secret(cfg):
                     return self.send_json(409, {"ok": False, "error": "not_configured"})
                 try:
                     return self.send_json(200, {"ok": True, "emails": fetch_school_emails(cfg)})
@@ -198,9 +287,14 @@ class JarvisHandler(http.server.SimpleHTTPRequestHandler):
                 except Exception as e:
                     return self.send_json(502, {"ok": False, "error": "Couldn't reach Gmail: " + str(e)})
             return self.send_json(404, {"ok": False})
-        if not self.path.split("?")[0].endswith((".html", "/")):
+        if not self.host_ok():
+            return self.send_error(403)
+        if not self.path.split("?")[0].endswith((".html", "/")) or "config" in self.path.lower():
             return self.send_error(404)  # never serve the config file or the Python code
         return super().do_GET()
+
+    def list_directory(self, path):
+        return self.send_error(404)  # no folder listings
 
     def do_POST(self):
         if not self.from_jarvis():
@@ -233,10 +327,12 @@ class JarvisHandler(http.server.SimpleHTTPRequestHandler):
                 return self.send_json(401, {"ok": False, "error": "Gmail rejected that address or app password."})
             except Exception as e:
                 return self.send_json(502, {"ok": False, "error": "Couldn't reach Gmail: " + str(e)})
-            save_config({"address": address, "app_password": app_password, "school_address": school_address})
+            save_config(address, app_password, school_address)
             return self.send_json(200, {"ok": True})
 
         if self.path == "/api/school/forget":
+            if sys.platform == "darwin":
+                subprocess.run(["security", "delete-generic-password", "-s", KEYCHAIN_SERVICE], capture_output=True)
             try:
                 os.remove(CONFIG)
             except FileNotFoundError:
@@ -246,8 +342,12 @@ class JarvisHandler(http.server.SimpleHTTPRequestHandler):
         return self.send_json(404, {"ok": False})
 
     def end_headers(self):
-        if self.path.endswith(".html") or self.path == "/":
+        if self.path.split("?")[0].endswith(".html") or self.path == "/":
             self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Security-Policy", CSP)
+            self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
         super().end_headers()
 
     def log_message(self, fmt, *args):
