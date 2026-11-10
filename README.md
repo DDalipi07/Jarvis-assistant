@@ -95,6 +95,14 @@ If your school email is a separate Google account, forward it to your Gmail firs
 
 Jarvis only asks for access to Docs, Slides and the Drive files it creates or opens. AI-written text is a starting point; check it, and follow your university's rules on AI use.
 
+### Desktop app (Instagram live inside Jarvis)
+Instagram blocks being shown inside web pages, so in Chrome it opens in a side window. To have it **live inside the Instagram panel**, run Jarvis as a desktop app:
+1. Install [Node.js](https://nodejs.org) (the LTS version).
+2. In the jarvis folder, run `npm install` once.
+3. Start Jarvis with `npm start`. It starts the server for you.
+
+In the app, voice input (🎤) is off because it relies on Chrome's speech service. Everything else works.
+
 ### More voices
 On Windows, open **Settings → Time & language → Speech → Add voices** and install **English (United Kingdom)**. Then pick a voice in the **Voice** menu under the chat.
 
@@ -113,6 +121,7 @@ On Windows, open **Settings → Time & language → Speech → Add voices** and 
 |---|---|
 | `jarvis_vision.html` | The app |
 | `jarvis_server.py` | Small local server: serves the page, controls volume, reads school emails |
+| `package.json`, `desktop_main.js`, `desktop_preload.js` | Optional desktop app (Electron) with Instagram docked inside |
 | `jarvis_gestures.py` | Optional standalone Python gesture demo (`pip install mediapipe==0.10.21 "numpy<2" opencv-contrib-python==4.10.0.84`) |
 
 ## License

@@ -226,6 +226,7 @@ form.ask input{flex:1}
 .ig-quick button:hover,.ig-quick button:focus-visible{border-color:#e1306c;color:#ff7aa8;outline:none}
 .ig-view{display:flex;justify-content:center;padding:0 14px 14px}
 .ig-frame{width:100%;max-width:440px;height:640px;border:0;border-radius:8px;background:#fff}
+.ig-live{height:760px;margin:0 14px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2);display:flex;align-items:center;justify-content:center;color:var(--muted);text-align:center;padding:20px}
 .yt-recent{display:flex;gap:8px;overflow-x:auto;padding:10px 14px 12px}
 .yt-recent button{flex:none;width:120px;background:none;border:1px solid var(--line);border-radius:4px;padding:0;cursor:pointer;color:var(--muted);font:11px var(--f-mono);text-align:left;overflow:hidden}
 .yt-recent button:hover{border-color:var(--cyan)}
@@ -334,6 +335,7 @@ form.ask input{flex:1}
         <input type="text" id="igLink" placeholder="Paste an Instagram post or reel link to watch it here" aria-label="Instagram post or reel link" autocomplete="off">
         <button class="btn" id="igShow" type="button">Show</button>
       </div>
+      <div class="ig-live" id="igLive" hidden>Loading Instagram…</div>
       <div class="ig-view" id="igView" hidden><iframe class="ig-frame" id="igFrame" title="Instagram post" allow="autoplay; encrypted-media; picture-in-picture; clipboard-write" allowfullscreen></iframe></div>
       <div class="bsrc" id="igNote">Feed, Reels and Messages open Instagram in its own window beside Jarvis, already signed in if you're signed in to Instagram in Chrome. Instagram doesn't let other sites show your feed inside them, but posts and reels play right here.</div>
     </section>
@@ -2198,7 +2200,7 @@ renderYtRecent();
 
 /* ---------- Instagram ---------- */
 let igWin = null;
-function openInstagram(path) {
+let openInstagram = function (path) {
   const url = "https://www.instagram.com/" + (path || "");
   const w = 460, h = Math.min(screen.availHeight || 900, 940);
   const left = Math.max(0, (screen.availWidth || 1400) - w - 10), top = 10;
@@ -2206,8 +2208,8 @@ function openInstagram(path) {
   if (!igWin) { window.open(url, "_blank", "noopener"); }
   $("igState").textContent = "open in its own window"; log("Instagram opened", "INSTAGRAM");
   return true;
-}
-function showInstagramPost(v) {
+};
+let showInstagramPost = function (v) {
   const m = /instagram\.com\/(?:[\w.]+\/)?(p|reel|reels|tv)\/([\w-]{5,})/.exec(String(v || ""));
   if (!m) { $("igState").textContent = "paste a post or reel link"; return false; }
   const kind = m[1] === "reels" ? "reel" : m[1];
@@ -2215,10 +2217,33 @@ function showInstagramPost(v) {
   $("igView").hidden = false; $("igState").textContent = kind === "reel" ? "reel" : "post";
   log("Showing Instagram " + (kind === "reel" ? "reel" : "post"), "INSTAGRAM");
   return true;
-}
+};
 document.querySelectorAll("[data-ig]").forEach(b => b.addEventListener("click", () => openInstagram(b.dataset.ig)));
 $("igShow").addEventListener("click", () => { if (showInstagramPost($("igLink").value)) $("igLink").value = ""; });
 $("igLink").addEventListener("keydown", e => { if (e.key === "Enter") $("igShow").click(); });
+
+/* ---------- desktop app: Instagram live inside the panel ---------- */
+if (window.jarvisDesktop) {
+  const live = $("igLive"); live.hidden = false;
+  $("igNote").textContent = "Instagram is live here. Log in once and it stays logged in. Use the buttons above to jump to Feed, Reels, Messages or Explore.";
+  $("igState").textContent = "live";
+  let lastRect = "";
+  const sendRect = () => {
+    const r = live.getBoundingClientRect(), vh = innerHeight, vw = innerWidth;
+    const top = Math.max(0, r.top), bottom = Math.min(vh, r.bottom), left = Math.max(0, r.left), right = Math.min(vw, r.right);
+    const visible = !document.hidden && bottom - top > 60 && right - left > 60 && !live.hidden;
+    const rect = { x: left, y: top, width: right - left, height: bottom - top, visible };
+    const key = JSON.stringify(rect); if (key !== lastRect) { lastRect = key; window.jarvisDesktop.instagramRect(rect); }
+  };
+  const loop = () => { sendRect(); requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+  document.addEventListener("visibilitychange", sendRect);
+  document.querySelectorAll("[data-ig]").forEach(b => { const nb = b.cloneNode(true); b.replaceWith(nb); nb.addEventListener("click", () => { window.jarvisDesktop.instagramGo(nb.dataset.ig); $("igState").textContent = nb.textContent.toLowerCase(); }); });
+  openInstagram = path => { window.jarvisDesktop.instagramGo(path || ""); $("igPanel").scrollIntoView({ behavior: "smooth", block: "start" }); $("igState").textContent = "live"; log("Instagram opened", "INSTAGRAM"); return true; };
+  showInstagramPost = v => { if (!/instagram\.com\//.test(String(v || ""))) { $("igState").textContent = "paste an Instagram link"; return false; } window.jarvisDesktop.instagramGo(String(v).trim()); $("igState").textContent = "live"; return true; };
+  // Chrome's speech service isn't available in the desktop app: typing still works.
+  $("micBtn").hidden = true;
+}
 
 renderBrief();
 setTimeout(briefCheck, 3000);

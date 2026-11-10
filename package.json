@@ -1,0 +1,13 @@
+{
+  "name": "jarvis-desktop",
+  "version": "1.0.0",
+  "description": "Jarvis as a desktop app, with Instagram live inside the Instagram panel",
+  "main": "desktop_main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "33.2.1"
+  }
+}
