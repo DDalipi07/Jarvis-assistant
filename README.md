@@ -100,6 +100,7 @@ Instagram blocks being shown inside web pages, so in Chrome it opens in a side w
 1. Install [Node.js](https://nodejs.org) (the LTS version).
 2. In the jarvis folder, run `npm install` once. If npm says Electron's install script was blocked, run `npm install-scripts approve electron` and then `npm install` again.
 3. Start Jarvis with `npm start`. It starts the server for you.
+4. **Desktop shortcut (Windows):** right-click **Start Jarvis.vbs** → **Show more options** → **Send to → Desktop (create shortcut)**. Then right-click the new shortcut → **Properties → Change Icon… → Browse**, pick `jarvis.ico` from the jarvis folder, and rename the shortcut to **Jarvis**. Double-click it to open Jarvis with no command window.
 
 In the app, voice input (🎤) is off because it relies on Chrome's speech service. Everything else works.
 
@@ -122,6 +123,7 @@ On Windows, open **Settings → Time & language → Speech → Add voices** and 
 | `jarvis_vision.html` | The app |
 | `jarvis_server.py` | Small local server: serves the page, controls volume, reads school emails |
 | `package.json`, `desktop_main.js`, `desktop_preload.js` | Optional desktop app (Electron) with Instagram docked inside |
+| `Start Jarvis.vbs`, `jarvis.ico` | Double-click launcher for the desktop app (no command window) and its icon |
 | `jarvis_gestures.py` | Optional standalone Python gesture demo (`pip install mediapipe==0.10.21 "numpy<2" opencv-contrib-python==4.10.0.84`) |
 
 ## License

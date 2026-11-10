@@ -39,7 +39,7 @@ async function ensureServer() {
 function createWindow() {
   win = new BrowserWindow({
     width: 1400, height: 900, minWidth: 900, minHeight: 600,
-    backgroundColor: "#060c13", title: "Jarvis", autoHideMenuBar: true,
+    backgroundColor: "#060c13", title: "Jarvis", autoHideMenuBar: true, icon: path.join(__dirname, "jarvis.ico"),
     webPreferences: { preload: path.join(__dirname, "desktop_preload.js"), contextIsolation: true, sandbox: true, nodeIntegration: false },
   });
 
