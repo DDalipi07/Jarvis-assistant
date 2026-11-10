@@ -17,6 +17,7 @@ Bring your own AI: it works with a **Claude (Anthropic)** or **OpenAI** API key,
 | ⏰ **Alarms, reminders, timers** | Set them by typing, talking or gesturing. Wake up to beeps, your own audio file, or any Spotify song. |
 | 🎓 **School** | Reads Google Classroom and school emails from Gmail, lists deadlines and reminds you the evening before and on the day. |
 | 🎵 **Spotify** | Album cover pop-up for the current song; skip, pause or play by gesture or voice. |
+| 📝 **Workspace (Google Docs & Slides)** | Write in Google Docs and Slides right inside Jarvis, or ask Jarvis to write a section of your essay or build a whole slide deck (with speaker notes) from one sentence. |
 | 📁 **Files** | Browse folders you choose (like your uni folder), search them, preview PDFs and images, and open files on your computer, or just ask Jarvis to find and open one. Read-only. |
 | 🔊 **Volume** | Change your computer's volume with a pinch gesture or by asking. |
 
@@ -82,6 +83,14 @@ Hold a gesture for one second.
 3. In the **School** panel, enter your Gmail address, your school email (optional) and the app password.
 
 If your school email is a separate Google account, forward it to your Gmail first: in the school Gmail, go to **Settings → Forwarding and POP/IMAP**.
+
+### Google Docs & Slides (Workspace)
+1. Go to the [Google Cloud console](https://console.cloud.google.com), create a project, and enable the **Google Docs API**, **Google Slides API** and **Google Drive API**.
+2. Under **OAuth consent screen**, choose **External** and add yourself as a **Test user**.
+3. Under **Credentials → Create credentials → OAuth client ID**, choose **Web application** and add `http://127.0.0.1:8000` as an authorized JavaScript origin.
+4. Paste the **Client ID** into the **Workspace** panel and click **Connect Google**.
+
+Jarvis only asks for access to Docs, Slides and the Drive files it creates or opens. AI-written text is a starting point; check it, and follow your university's rules on AI use.
 
 ### More voices
 On Windows, open **Settings → Time & language → Speech → Add voices** and install **English (United Kingdom)**. Then pick a voice in the **Voice** menu under the chat.

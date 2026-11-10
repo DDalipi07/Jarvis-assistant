@@ -35,10 +35,12 @@ ALLOWED_HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}  # blocks "DNS rebind
 # it couldn't send your keys anywhere else.
 CSP = "; ".join([
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net",
+    "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://accounts.google.com/gsi/client",
     "connect-src 'self' https://api.anthropic.com https://api.openai.com https://accounts.spotify.com "
-    "https://api.spotify.com https://cdn.jsdelivr.net https://storage.googleapis.com",
-    "img-src 'self' data: blob: https://*.scdn.co https://*.spotifycdn.com",
+    "https://api.spotify.com https://cdn.jsdelivr.net https://storage.googleapis.com "
+    "https://docs.googleapis.com https://slides.googleapis.com https://www.googleapis.com https://accounts.google.com/gsi/",
+    "frame-src https://docs.google.com https://accounts.google.com",
+    "img-src 'self' data: blob: https://*.scdn.co https://*.spotifycdn.com https://*.googleusercontent.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src https://fonts.gstatic.com",
     "media-src 'self' blob: mediastream:",

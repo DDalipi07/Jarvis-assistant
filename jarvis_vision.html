@@ -176,6 +176,26 @@ form.ask input{flex:1}
 .facts{display:flex;gap:6px}
 .facts a,.facts button{font:11px var(--f-mono);color:var(--cyan);background:none;border:1px solid var(--line-hi);border-radius:3px;padding:3px 7px;cursor:pointer;text-decoration:none}
 .facts a:hover,.facts button:hover{border-color:var(--cyan)}
+.ws-tabs{display:flex;gap:4px}
+.ws-tabs button{background:none;border:1px solid transparent;color:var(--muted);font:12px var(--f-display);letter-spacing:.16em;text-transform:uppercase;padding:4px 10px;border-radius:4px;cursor:pointer}
+.ws-tabs button[aria-selected="true"]{color:var(--cyan);border-color:var(--line-hi);background:var(--panel-2)}
+.ws{display:grid;grid-template-columns:230px minmax(0,1fr);min-height:640px}
+@media (max-width:880px){.ws{grid-template-columns:1fr}.ws-side{border-right:0!important;border-bottom:1px solid var(--line)}}
+.ws-side{border-right:1px solid var(--line);display:flex;flex-direction:column;min-width:0}
+.ws-side .acts{display:flex;flex-direction:column;gap:8px;padding:12px}
+.ws-list{flex:1;overflow-y:auto;max-height:420px;border-top:1px solid var(--line)}
+.ws-item{display:block;width:100%;text-align:left;background:none;border:0;border-top:1px solid rgba(28,50,70,.6);color:var(--text);padding:9px 12px;cursor:pointer;font:14px var(--f-body);overflow-wrap:anywhere}
+.ws-item:first-child{border-top:0}
+.ws-item:hover,.ws-item.on{background:var(--panel-2)}
+.ws-item small{display:block;font:11px var(--f-mono);color:var(--muted)}
+.ws-main{display:flex;flex-direction:column;min-width:0}
+.ws-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid var(--line)}
+.ws-bar .title{flex:1;min-width:0;font:15px var(--f-display);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ws-frame{flex:1;min-height:520px;width:100%;border:0;background:#fff}
+.ws-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:30px;text-align:center;color:var(--muted)}
+.ws-ai{display:flex;gap:8px;flex-wrap:wrap;padding:12px;border-top:1px solid var(--line);align-items:center}
+.ws-ai input[type=text]{flex:1;min-width:200px}
+.ws-ai select{width:auto}
 .tog{display:flex;align-items:center;gap:6px;font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;color:var(--muted);text-transform:none;cursor:pointer}
 </style>
 </head>
@@ -378,6 +398,53 @@ form.ask input{flex:1}
 
     </div>
   </div>
+
+  <section class="panel" id="wsPanel">
+    <div class="ph"><span>Workspace</span>
+      <span style="display:flex;gap:12px;align-items:center"><span class="ws-tabs" role="tablist"><button type="button" role="tab" id="tabDocs" aria-selected="true">Docs</button><button type="button" role="tab" id="tabSlides" aria-selected="false">Slides</button></span><em id="gState">Google not connected</em></span>
+    </div>
+    <div class="setup" id="gSetup" hidden>
+      <p>Connect your Google account so Jarvis can create Docs and Slides and write into them for you. One-time setup, about 10 minutes:</p>
+      <ol>
+        <li>Go to <b>console.cloud.google.com</b>, create a project (e.g. "Jarvis")</li>
+        <li>In <b>APIs &amp; Services → Library</b>, enable <b>Google Docs API</b>, <b>Google Slides API</b> and <b>Google Drive API</b></li>
+        <li>In <b>OAuth consent screen</b>: choose External, fill in the app name and your email, and add yourself under <b>Test users</b></li>
+        <li>In <b>Credentials → Create credentials → OAuth client ID</b>: type <b>Web application</b>, and under Authorized JavaScript origins add <b>http://127.0.0.1:8000</b></li>
+        <li>Copy the <b>Client ID</b> and paste it below</li>
+      </ol>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><input type="text" id="gClient" placeholder="Google Client ID (ends in .apps.googleusercontent.com)" aria-label="Google Client ID" autocomplete="off" style="flex:1;min-width:0"><button class="btn" id="gConnect" type="button">Connect Google</button></div>
+      <p>You can still open and edit any Doc or Slides link without connecting. Connecting lets Jarvis create files and write in them.</p>
+      <p id="gErr" style="color:var(--red)"></p>
+    </div>
+    <div class="ws">
+      <div class="ws-side">
+        <div class="acts">
+          <button class="btn" id="wsNew" type="button">New document</button>
+          <div style="display:flex;gap:6px"><input type="text" id="wsLink" placeholder="Paste a Google link" aria-label="Google Docs or Slides link" autocomplete="off" style="flex:1;min-width:0"><button class="btn ghost" id="wsOpen" type="button">Open</button></div>
+          <p id="wsMsg" style="margin:0;font-size:12px;color:var(--muted)"></p>
+        </div>
+        <div class="ws-list" id="wsList"></div>
+      </div>
+      <div class="ws-main">
+        <div class="ws-bar" id="wsBar" hidden>
+          <span class="title" id="wsTitle"></span>
+          <a class="btn ghost" id="wsExternal" target="_blank" rel="noopener" style="text-decoration:none">Open in Google ↗</a>
+          <button class="btn ghost" id="wsClose" type="button">Close</button>
+        </div>
+        <iframe class="ws-frame" id="wsFrame" title="Google editor" hidden allow="clipboard-read; clipboard-write"></iframe>
+        <div class="ws-empty" id="wsEmpty">
+          <b style="color:var(--text);font-weight:500" id="wsEmptyTitle">Write in Google Docs without leaving Jarvis</b>
+          <span id="wsEmptyText">Create a new document, open one from the list, or paste a link. Then type here, or ask Jarvis below to write for you.</span>
+        </div>
+        <div class="ws-ai">
+          <input type="text" id="wsAsk" placeholder="Ask Jarvis to write… e.g. a 300-word intro on corporate sustainability" aria-label="Ask Jarvis to write" autocomplete="off">
+          <select id="wsSlideCount" aria-label="Number of slides" hidden><option>5</option><option selected>8</option><option>10</option><option>12</option></select>
+          <label class="tog" id="wsResearchWrap"><input type="checkbox" id="wsResearch" checked> Research the web</label>
+          <button class="btn" id="wsGo" type="button">Write it</button>
+        </div>
+      </div>
+    </div>
+  </section>
 </div>
 
 <script type="module">
@@ -961,7 +1028,7 @@ function nowLine() {
 function systemPrompt() {
   return `You are JARVIS, the user's personal assistant: calm, quick, polite, a little dry and witty, like a refined British butler.${prefs.name ? " The user's name is " + prefs.name + "." : ""}${prefs.city ? " The user lives in " + prefs.city + "." : ""}
 Current local time: ${nowLine()}.
-You can: set alarms, reminders and timers (add_item, list_items, remove_item), control Spotify (spotify_control, now_playing), change the computer volume (set_volume), check school assignments and deadlines (get_school_tasks), find and open files in the user's shared folders (find_files, open_file), and search the web for news, stock prices, weather and facts (web_search).
+You can: set alarms, reminders and timers (add_item, list_items, remove_item), control Spotify (spotify_control, now_playing), change the computer volume (set_volume), check school assignments and deadlines (get_school_tasks), find and open files in the user's shared folders (find_files, open_file), write Google Docs and build Google Slides (write_document, make_presentation), and search the web for news, stock prices, weather and facts (web_search).
 Rules:
 - Replies are spoken aloud: 1-4 short sentences, plain text, no markdown, no lists, no URLs.
 - Resolve relative times ("in 10 minutes", "tomorrow at 7") from the current local time. If an alarm has no time, ask one short question.
@@ -979,6 +1046,8 @@ const TOOLS = [
   { name: "get_school_tasks", description: "Get the user's upcoming school assignments and deadlines (from Google Classroom and school email): course, title, due date.", schema: obj() },
   { name: "find_files", description: "Search the user's shared folders (for example YEAR 2) for files or folders whose name or path contains the words. Returns folder index, relative path and name.", schema: obj({ query: { type: "string" } }, ["query"]) },
   { name: "open_file", description: "Open a file or folder from find_files on the user's computer with its normal app (Word, PDF reader, Explorer).", schema: obj({ root: { type: "integer" }, path: { type: "string" } }, ["root", "path"]) },
+  { name: "write_document", description: "Write text into a Google Doc for the user (essay, notes, summary, report section...). Creates a new doc unless one is open in the Workspace. Can research the web first.", schema: obj({ instruction: { type: "string", description: "What to write, with any length, tone or structure the user asked for" }, research: { type: "boolean" } }, ["instruction"]) },
+  { name: "make_presentation", description: "Build a Google Slides presentation for the user on a topic (titles, bullets, speaker notes).", schema: obj({ topic: { type: "string" }, slides: { type: "integer", description: "Number of slides, default 8" }, research: { type: "boolean" } }, ["topic"]) },
   { name: "set_volume", description: "Change the computer's system volume. Each step is about 2%. Use mute to toggle mute.", schema: obj({ action: { type: "string", enum: ["up", "down", "mute"] }, steps: { type: "integer", description: "1-25, default 5" } }, ["action"]) }
 ].map(t => ({ ...t, run: inp => runTool(t.name, inp) }));
 async function runTool(name, inp) {
@@ -1016,6 +1085,14 @@ async function runTool(name, inp) {
   if (name === "open_file") {
     const ok = await openOnComputer(Number(inp.root) || 0, String(inp.path || ""), String(inp.path || "").split("/").pop());
     return ok ? { ok: true } : { error: "Couldn't open that file." };
+  }
+  if (name === "write_document" || name === "make_presentation") {
+    if (!gClientId()) return { error: "Google isn't connected yet. The user can connect it in the Workspace panel." };
+    try {
+      await gToken(false);
+      if (name === "write_document") { setTab("docs"); const o = await writeDoc(String(inp.instruction || ""), inp.research !== false); openInWorkspace(o.it); return { ok: true, document: o.it.name }; }
+      setTab("slides"); const o = await makeSlides(String(inp.topic || ""), Math.max(3, Math.min(20, Number(inp.slides) || 8)), inp.research !== false); openInWorkspace(o.it); return { ok: true, presentation: o.it.name, slides: o.slides };
+    } catch (e) { return { error: e.message }; }
   }
   if (name === "set_volume") {
     const action = ["up", "down", "mute"].includes(inp.action) ? inp.action : "up";
@@ -1548,6 +1625,251 @@ setInterval(() => {
   if (document.hidden || !files.roots.length || $("filesBrowser").hidden || $("fileSearch").value.trim()) return;
   listFolder(files.path, true);
 }, 4000);
+
+/* ---------- workspace: Google Docs & Slides inside Jarvis ---------- */
+const G_SCOPES = "https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/presentations https://www.googleapis.com/auth/drive.file";
+const ws = { tab: "docs", current: null, token: null, tokenExp: 0, client: null, busy: false };
+const KIND = {
+  docs: { label: "document", mime: "application/vnd.google-apps.document", url: id => `https://docs.google.com/document/d/${id}/edit`, re: /docs\.google\.com\/document\/d\/([\w-]{20,})/ },
+  slides: { label: "presentation", mime: "application/vnd.google-apps.presentation", url: id => `https://docs.google.com/presentation/d/${id}/edit`, re: /docs\.google\.com\/presentation\/d\/([\w-]{20,})/ }
+};
+const gClientId = () => lsGet("jarvis-google-client") || "";
+function recent() { try { return JSON.parse(lsGet("jarvis-ws-recent") || "[]"); } catch { return []; } }
+function remember(item) {
+  const list = recent().filter(r => r.id !== item.id);
+  list.unshift({ ...item, at: Date.now() });
+  lsSet("jarvis-ws-recent", JSON.stringify(list.slice(0, 40)));
+}
+function wsMsg(t, bad) { $("wsMsg").textContent = t || ""; $("wsMsg").style.color = bad ? "var(--red)" : "var(--muted)"; }
+
+/* Google sign-in (Google Identity Services, token flow) */
+function loadGis() {
+  return new Promise((res, rej) => {
+    if (window.google && google.accounts && google.accounts.oauth2) return res();
+    const sc = document.createElement("script"); sc.src = "https://accounts.google.com/gsi/client"; sc.async = true;
+    sc.onload = () => res(); sc.onerror = () => rej(new Error("Couldn't load Google sign-in. Check your internet connection."));
+    document.head.append(sc);
+  });
+}
+async function gToken(interactive) {
+  if (ws.token && Date.now() < ws.tokenExp) return ws.token;
+  if (!gClientId()) throw new Error("Connect Google first (Workspace panel).");
+  await loadGis();
+  return new Promise((res, rej) => {
+    ws.client = google.accounts.oauth2.initTokenClient({
+      client_id: gClientId(), scope: G_SCOPES,
+      callback: r => {
+        if (r.error) return rej(new Error(r.error_description || r.error));
+        ws.token = r.access_token; ws.tokenExp = Date.now() + (Number(r.expires_in || 3600) - 120) * 1000;
+        lsSet("jarvis-google-connected", "1"); showGState(); res(ws.token);
+      },
+      error_callback: e => rej(new Error(e && e.type === "popup_closed" ? "Google sign-in was closed." : "Google sign-in was blocked. Allow pop-ups for this page and try again."))
+    });
+    ws.client.requestAccessToken({ prompt: interactive ? "consent" : "" });
+  });
+}
+async function gFetch(url, opts = {}) {
+  const t = await gToken(false);
+  const r = await fetch(url, { ...opts, headers: { Authorization: "Bearer " + t, "Content-Type": "application/json", ...(opts.headers || {}) } });
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 401) { ws.token = null; throw new Error("Google sign-in expired. Try again."); }
+  if (!r.ok) throw new Error((j.error && j.error.message) || "Google said HTTP " + r.status);
+  return j;
+}
+function showGState() {
+  const connected = !!gClientId() && lsGet("jarvis-google-connected") === "1";
+  $("gState").textContent = connected ? "Google connected" : "Google not connected";
+  $("gSetup").hidden = connected;
+}
+$("gConnect").addEventListener("click", async () => {
+  const id = $("gClient").value.trim(); $("gErr").textContent = "";
+  if (!/\.apps\.googleusercontent\.com$/.test(id)) { $("gErr").textContent = "That isn't a Google Client ID. It ends with .apps.googleusercontent.com."; return; }
+  lsSet("jarvis-google-client", id);
+  try { await gToken(true); log("Google connected", "WORKSPACE"); refreshList(); }
+  catch (e) { $("gErr").textContent = e.message + (/origin|redirect|invalid_client|idpiframe/i.test(e.message) ? " Check that http://127.0.0.1:8000 is listed under Authorized JavaScript origins." : ""); }
+});
+
+/* list + open */
+async function refreshList() {
+  const box = $("wsList"); box.textContent = "";
+  let items = recent().filter(r => r.kind === ws.tab);
+  if (gClientId() && lsGet("jarvis-google-connected") === "1" && ws.token) {
+    try {
+      const q = encodeURIComponent(`mimeType='${KIND[ws.tab].mime}' and trashed=false`);
+      const j = await gFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=modifiedTime desc&pageSize=30&fields=files(id,name,modifiedTime)`);
+      const seen = new Set(items.map(i => i.id));
+      for (const f of j.files || []) if (!seen.has(f.id)) items.push({ id: f.id, name: f.name, kind: ws.tab, at: Date.parse(f.modifiedTime) });
+      items.sort((a, b) => (b.at || 0) - (a.at || 0));
+    } catch {}
+  }
+  if (!items.length) { box.append(mkEl("div", "empty", ws.tab === "docs" ? "Your documents will appear here." : "Your presentations will appear here.")); return; }
+  for (const it of items.slice(0, 30)) {
+    const b = mkEl("button", "ws-item" + (ws.current && ws.current.id === it.id ? " on" : ""), it.name || "Untitled"); b.type = "button";
+    b.append(mkEl("small", "", it.at ? new Date(it.at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : ""));
+    b.onclick = () => openInWorkspace(it);
+    box.append(b);
+  }
+}
+function openInWorkspace(it) {
+  ws.current = it; remember(it);
+  const url = KIND[it.kind].url(it.id);
+  $("wsFrame").src = url; $("wsFrame").hidden = false; $("wsEmpty").hidden = true;
+  $("wsBar").hidden = false; $("wsTitle").textContent = it.name || "Untitled"; $("wsExternal").href = url;
+  wsMsg("If the editor stays blank, sign in to Google in this browser or use Open in Google ↗.");
+  refreshList();
+}
+$("wsClose").addEventListener("click", () => { ws.current = null; $("wsFrame").src = "about:blank"; $("wsFrame").hidden = true; $("wsBar").hidden = true; $("wsEmpty").hidden = false; wsMsg(""); refreshList(); });
+$("wsOpen").addEventListener("click", () => {
+  const v = $("wsLink").value.trim();
+  for (const k of ["docs", "slides"]) { const m = KIND[k].re.exec(v); if (m) { setTab(k); openInWorkspace({ id: m[1], kind: k, name: k === "docs" ? "Document" : "Presentation" }); $("wsLink").value = ""; return; } }
+  wsMsg("Paste a link to a Google Doc or Google Slides file.", true);
+});
+async function createFile(kind, title) {
+  title = (title || "").trim() || (kind === "docs" ? "Untitled document" : "Untitled presentation");
+  const j = kind === "docs"
+    ? await gFetch("https://docs.googleapis.com/v1/documents", { method: "POST", body: JSON.stringify({ title }) })
+    : await gFetch("https://slides.googleapis.com/v1/presentations", { method: "POST", body: JSON.stringify({ title }) });
+  const it = { id: j.documentId || j.presentationId, name: title, kind };
+  log(`Created ${KIND[kind].label}: ${title}`, "WORKSPACE");
+  return it;
+}
+$("wsNew").addEventListener("click", async () => {
+  if (!gClientId()) { $("gSetup").hidden = false; wsMsg("Connect Google first, or open an existing file with a link.", true); return; }
+  try { const it = await createFile(ws.tab, ""); openInWorkspace(it); } catch (e) { wsMsg(e.message, true); }
+});
+function setTab(k) {
+  ws.tab = k;
+  $("tabDocs").setAttribute("aria-selected", String(k === "docs")); $("tabSlides").setAttribute("aria-selected", String(k === "slides"));
+  $("wsNew").textContent = k === "docs" ? "New document" : "New presentation";
+  $("wsSlideCount").hidden = k !== "slides";
+  $("wsAsk").placeholder = k === "docs" ? "Ask Jarvis to write… e.g. a 300-word intro on corporate sustainability" : "Ask Jarvis for slides… e.g. marketing strategies of Nike";
+  $("wsGo").textContent = k === "docs" ? "Write it" : "Make slides";
+  $("wsEmptyTitle").textContent = k === "docs" ? "Write in Google Docs without leaving Jarvis" : "Build Google Slides without leaving Jarvis";
+  $("wsEmptyText").textContent = k === "docs" ? "Create a new document, open one from the list, or paste a link. Then type here, or ask Jarvis below to write for you." : "Create a presentation, open one, or just describe the deck below and Jarvis builds it for you.";
+  refreshList();
+}
+$("tabDocs").addEventListener("click", () => setTab("docs"));
+$("tabSlides").addEventListener("click", () => setTab("slides"));
+
+/* reading + writing with the Docs/Slides APIs */
+function docText(doc) {
+  let out = "";
+  for (const el of (doc.body && doc.body.content) || []) if (el.paragraph) for (const pe of el.paragraph.elements || []) if (pe.textRun) out += pe.textRun.content;
+  return out;
+}
+async function appendToDoc(docId, paragraphs) {
+  const doc = await gFetch(`https://docs.googleapis.com/v1/documents/${docId}?fields=body(content(endIndex))`);
+  const content = (doc.body && doc.body.content) || [];
+  let index = Math.max(1, (content.length ? content[content.length - 1].endIndex : 2) - 1);
+  const requests = [], styles = [];
+  let text = index > 1 ? "\n" : "", pos = index + text.length;
+  for (const p of paragraphs) {
+    const t = String(p.text || "").replace(/\r/g, "").trim();
+    if (!t) continue;
+    const start = pos; text += t + "\n"; pos += t.length + 1;
+    const style = ["TITLE", "HEADING_1", "HEADING_2", "HEADING_3", "NORMAL_TEXT"].includes(p.style) ? p.style : "NORMAL_TEXT";
+    styles.push({ updateParagraphStyle: { range: { startIndex: start, endIndex: pos }, paragraphStyle: { namedStyleType: style }, fields: "namedStyleType" } });
+    if (p.bullet) styles.push({ createParagraphBullets: { range: { startIndex: start, endIndex: pos }, bulletPreset: "BULLET_DISC_CIRCLE_SQUARE" } });
+  }
+  if (!text.trim()) return 0;
+  requests.push({ insertText: { location: { index }, text } }, ...styles);
+  await gFetch(`https://docs.googleapis.com/v1/documents/${docId}:batchUpdate`, { method: "POST", body: JSON.stringify({ requests }) });
+  return text.length;
+}
+async function addSlides(presId, deck) {
+  const pres = await gFetch(`https://slides.googleapis.com/v1/presentations/${presId}`);
+  const requests = [], uid = () => "j" + Math.random().toString(36).slice(2, 12);
+  const first = pres.slides && pres.slides[0];
+  const fresh = pres.slides && pres.slides.length === 1 && (first.pageElements || []).every(pe => !(pe.shape && pe.shape.text));
+  if (fresh && deck.title) {
+    for (const pe of first.pageElements || []) {
+      const ph = pe.shape && pe.shape.placeholder && pe.shape.placeholder.type;
+      if (ph === "CENTERED_TITLE" || ph === "TITLE") requests.push({ insertText: { objectId: pe.objectId, text: deck.title } });
+      if (ph === "SUBTITLE" && deck.subtitle) requests.push({ insertText: { objectId: pe.objectId, text: deck.subtitle } });
+    }
+  }
+  let at = (pres.slides || []).length;
+  for (const sl of arr(deck.slides)) {
+    const sid = uid(), tid = uid(), bid = uid();
+    requests.push({ createSlide: { objectId: sid, insertionIndex: at++, slideLayoutReference: { predefinedLayout: "TITLE_AND_BODY" },
+      placeholderIdMappings: [{ layoutPlaceholder: { type: "TITLE", index: 0 }, objectId: tid }, { layoutPlaceholder: { type: "BODY", index: 0 }, objectId: bid }] } });
+    requests.push({ insertText: { objectId: tid, text: String(sl.title || "").slice(0, 120) || " " } });
+    const bullets = arr(sl.bullets).map(b => String(b).trim()).filter(Boolean).slice(0, 7);
+    if (bullets.length) {
+      requests.push({ insertText: { objectId: bid, text: bullets.join("\n") } });
+      requests.push({ createParagraphBullets: { objectId: bid, textRange: { type: "ALL" }, bulletPreset: "BULLET_DISC_CIRCLE_SQUARE" } });
+    }
+    if (sl.notes) requests.push({ __notes: { slideId: sid, text: String(sl.notes) } });
+  }
+  const real = requests.filter(r => !r.__notes);
+  if (real.length) await gFetch(`https://slides.googleapis.com/v1/presentations/${presId}:batchUpdate`, { method: "POST", body: JSON.stringify({ requests: real }) });
+  // speaker notes need the notes placeholder ids, which exist only after the slides are created
+  const notes = requests.filter(r => r.__notes);
+  if (notes.length) {
+    try {
+      const p2 = await gFetch(`https://slides.googleapis.com/v1/presentations/${presId}`);
+      const nreq = [];
+      for (const n of notes) {
+        const sl = (p2.slides || []).find(s => s.objectId === n.__notes.slideId);
+        const nid = sl && sl.slideProperties && sl.slideProperties.notesPage && sl.slideProperties.notesPage.notesProperties && sl.slideProperties.notesPage.notesProperties.speakerNotesObjectId;
+        if (nid) nreq.push({ insertText: { objectId: nid, text: n.__notes.text } });
+      }
+      if (nreq.length) await gFetch(`https://slides.googleapis.com/v1/presentations/${presId}:batchUpdate`, { method: "POST", body: JSON.stringify({ requests: nreq }) });
+    } catch {}
+  }
+  return arr(deck.slides).length;
+}
+const SAVE_DOC = { name: "save_document_text", description: "Save the finished writing so Jarvis inserts it into the Google Doc. Call once.",
+  schema: { type: "object", properties: { title: { type: "string", description: "A short title for the document, if it doesn't have one" },
+    paragraphs: { type: "array", items: { type: "object", properties: { style: { type: "string", enum: ["TITLE", "HEADING_1", "HEADING_2", "HEADING_3", "NORMAL_TEXT"] }, text: { type: "string" }, bullet: { type: "boolean" } }, required: ["style", "text"] } } },
+    required: ["paragraphs"] } };
+const SAVE_DECK = { name: "save_slides", description: "Save the finished slide deck so Jarvis builds it in Google Slides. Call once.",
+  schema: { type: "object", properties: { title: { type: "string" }, subtitle: { type: "string" },
+    slides: { type: "array", items: { type: "object", properties: { title: { type: "string" }, bullets: { type: "array", items: { type: "string" } }, notes: { type: "string", description: "Speaker notes, 2-4 sentences" } }, required: ["title", "bullets"] } } },
+    required: ["title", "slides"] } };
+const STUDENT_SYSTEM = () => `You are JARVIS, a writing and study assistant for a university student${prefs.name ? " named " + prefs.name : ""}. Write clearly in the student's language level, well structured, original and accurate. When you use facts from the web, keep them correct and name sources in the text where an academic reader would expect it. Current date: ${nowLine()}.`;
+
+async function writeDoc(instruction, research, target) {
+  let it = target || (ws.current && ws.current.kind === "docs" ? ws.current : null);
+  let existing = "";
+  if (it) { try { existing = docText(await gFetch(`https://docs.googleapis.com/v1/documents/${it.id}`)).slice(-6000); } catch {} }
+  const prompt = `${existing.trim() ? "The document so far (end of it):\n\"\"\"\n" + existing + "\n\"\"\"\n\n" : "The document is new and empty.\n\n"}Task: ${instruction}\n\nWrite the new text to add at the end of the document${existing.trim() ? ", continuing naturally from what's there" : ""}. Use headings where they help. Then call save_document_text.`;
+  const res = await agent({ system: STUDENT_SYSTEM(), messages: [{ role: "user", content: prompt }], tools: [SAVE_DOC], search: !!research, maxUses: 4, stopTool: "save_document_text", maxTokens: 6000 });
+  if (!res.stop || !arr(res.stop.paragraphs).length) throw new Error("Jarvis didn't produce any text. Try rephrasing.");
+  if (!it) { it = await createFile("docs", res.stop.title || instruction.slice(0, 60)); }
+  const n = await appendToDoc(it.id, res.stop.paragraphs);
+  return { it, chars: n };
+}
+async function makeSlides(topic, count, research, target) {
+  const prompt = `Make a ${count}-slide presentation: ${topic}\nEach slide: a short title, 3-6 concise bullets (not full paragraphs), and speaker notes. Start with an agenda or overview slide and end with a conclusion slide. Then call save_slides.`;
+  const res = await agent({ system: STUDENT_SYSTEM(), messages: [{ role: "user", content: prompt }], tools: [SAVE_DECK], search: !!research, maxUses: 4, stopTool: "save_slides", maxTokens: 6000 });
+  if (!res.stop || !arr(res.stop.slides).length) throw new Error("Jarvis didn't produce any slides. Try rephrasing.");
+  let it = target || (ws.current && ws.current.kind === "slides" ? ws.current : null);
+  if (!it) it = await createFile("slides", res.stop.title || topic.slice(0, 60));
+  const n = await addSlides(it.id, res.stop);
+  return { it, slides: n };
+}
+$("wsGo").addEventListener("click", async () => {
+  const text = $("wsAsk").value.trim();
+  if (!text) { wsMsg("Type what you want Jarvis to write.", true); $("wsAsk").focus(); return; }
+  if (!apiKey) { wsMsg("Add your AI key in Settings first.", true); return; }
+  if (!gClientId()) { $("gSetup").hidden = false; wsMsg("Connect Google first so Jarvis can write into your files.", true); return; }
+  if (ws.busy) return;
+  ws.busy = true; $("wsGo").disabled = true; $("reactor").classList.add("busy");
+  wsMsg(ws.tab === "docs" ? "Jarvis is writing…" : "Jarvis is building your slides…");
+  try {
+    await gToken(false);
+    const out = ws.tab === "docs" ? await writeDoc(text, $("wsResearch").checked) : await makeSlides(text, Number($("wsSlideCount").value), $("wsResearch").checked);
+    $("wsAsk").value = "";
+    if (!ws.current || ws.current.id !== out.it.id) openInWorkspace(out.it); else { $("wsFrame").src = $("wsFrame").src; }
+    wsMsg(ws.tab === "docs" ? "Done. The new text is at the end of the document." : `Done. Added ${out.slides} slides.`);
+    speak(ws.tab === "docs" ? "Done. I've added it to your document." : `Done. I've added ${out.slides} slides.`);
+  } catch (e) { wsMsg(e.status ? friendlyError(e) : e.message, true); }
+  finally { ws.busy = false; $("wsGo").disabled = false; if (!brainBusy) $("reactor").classList.remove("busy"); }
+});
+$("wsAsk").addEventListener("keydown", e => { if (e.key === "Enter") $("wsGo").click(); });
+$("gClient").value = gClientId();
+showGState(); setTab("docs");
 
 renderBrief();
 setTimeout(briefCheck, 3000);
