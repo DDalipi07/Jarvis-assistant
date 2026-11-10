@@ -220,6 +220,12 @@ form.ask input{flex:1}
 .yt-res .len{position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,.8);color:#fff;font:11px var(--f-mono);padding:1px 5px;border-radius:3px}
 .yt-res .tt{display:block;padding:8px 10px 2px;font:13px/1.35 var(--f-body);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .yt-res small{display:block;padding:0 10px 9px;font:11px var(--f-mono);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ig-quick{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:12px 14px}
+@media (max-width:520px){.ig-quick{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.ig-quick button{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;color:var(--text);padding:12px 6px;cursor:pointer;font:12px var(--f-mono);letter-spacing:.06em;text-transform:uppercase}
+.ig-quick button:hover,.ig-quick button:focus-visible{border-color:#e1306c;color:#ff7aa8;outline:none}
+.ig-view{display:flex;justify-content:center;padding:0 14px 14px}
+.ig-frame{width:100%;max-width:440px;height:640px;border:0;border-radius:8px;background:#fff}
 .yt-recent{display:flex;gap:8px;overflow-x:auto;padding:10px 14px 12px}
 .yt-recent button{flex:none;width:120px;background:none;border:1px solid var(--line);border-radius:4px;padding:0;cursor:pointer;color:var(--muted);font:11px var(--f-mono);text-align:left;overflow:hidden}
 .yt-recent button:hover{border-color:var(--cyan)}
@@ -314,6 +320,22 @@ form.ask input{flex:1}
       <div class="yt-empty" id="ytEmpty"><b style="color:var(--text);font-weight:500">Watch YouTube right here</b><span>Search for anything above, paste a link, or say “Jarvis, play lo-fi study music”.</span></div>
       <div class="yt-results" id="ytResults" hidden></div>
       <div class="yt-recent" id="ytRecent"></div>
+    </section>
+
+    <section class="panel" id="igPanel">
+      <div class="ph"><span>Instagram</span><em id="igState">ready</em></div>
+      <div class="ig-quick">
+        <button type="button" data-ig="">Feed</button>
+        <button type="button" data-ig="reels/">Reels</button>
+        <button type="button" data-ig="direct/inbox/">Messages</button>
+        <button type="button" data-ig="explore/">Explore</button>
+      </div>
+      <div class="yt-bar" style="border-top:1px solid var(--line)">
+        <input type="text" id="igLink" placeholder="Paste an Instagram post or reel link to watch it here" aria-label="Instagram post or reel link" autocomplete="off">
+        <button class="btn" id="igShow" type="button">Show</button>
+      </div>
+      <div class="ig-view" id="igView" hidden><iframe class="ig-frame" id="igFrame" title="Instagram post" allow="autoplay; encrypted-media; picture-in-picture; clipboard-write" allowfullscreen></iframe></div>
+      <div class="bsrc" id="igNote">Feed, Reels and Messages open Instagram in its own window beside Jarvis, already signed in if you're signed in to Instagram in Chrome. Instagram doesn't let other sites show your feed inside them, but posts and reels play right here.</div>
     </section>
     </div>
 
@@ -1081,7 +1103,7 @@ function nowLine() {
 function systemPrompt() {
   return `You are JARVIS, the user's personal assistant: calm, quick, polite, a little dry and witty, like a refined British butler.${prefs.name ? " The user's name is " + prefs.name + "." : ""}${prefs.city ? " The user lives in " + prefs.city + "." : ""}
 Current local time: ${nowLine()}.
-You can: set alarms, reminders and timers (add_item, list_items, remove_item), control Spotify (spotify_control, now_playing), change the computer volume (set_volume), check school assignments and deadlines (get_school_tasks), find and open files in the user's shared folders (find_files, open_file), write Google Docs and build Google Slides (write_document, make_presentation), search and play YouTube videos in Jarvis (search_youtube, play_youtube, youtube_control); when asked to play something, search_youtube then play the best match, and search the web for news, stock prices, weather and facts (web_search).
+You can: set alarms, reminders and timers (add_item, list_items, remove_item), control Spotify (spotify_control, now_playing), change the computer volume (set_volume), check school assignments and deadlines (get_school_tasks), find and open files in the user's shared folders (find_files, open_file), write Google Docs and build Google Slides (write_document, make_presentation), open Instagram (open_instagram), search and play YouTube videos in Jarvis (search_youtube, play_youtube, youtube_control); when asked to play something, search_youtube then play the best match, and search the web for news, stock prices, weather and facts (web_search).
 Rules:
 - Replies are spoken aloud: 1-4 short sentences, plain text, no markdown, no lists, no URLs.
 - Resolve relative times ("in 10 minutes", "tomorrow at 7") from the current local time. If an alarm has no time, ask one short question.
@@ -1104,6 +1126,7 @@ const TOOLS = [
   { name: "search_youtube", description: "Search YouTube and show the results on the user's YouTube screen. Returns video ids, titles, channels and lengths.", schema: obj({ query: { type: "string" } }, ["query"]) },
   { name: "play_youtube", description: "Play a YouTube video or playlist in Jarvis's YouTube screen, by link or video id (use search_youtube to find one).", schema: obj({ url: { type: "string", description: "YouTube link or 11-character video id" }, title: { type: "string" } }, ["url"]) },
   { name: "youtube_control", description: "Pause, resume or close the YouTube video in Jarvis.", schema: obj({ action: { type: "string", enum: ["pause", "play", "close"] } }, ["action"]) },
+  { name: "open_instagram", description: "Open Instagram for the user in its own window beside Jarvis: feed, reels, messages or explore. Can also show a specific post or reel link inside Jarvis.", schema: obj({ section: { type: "string", enum: ["feed", "reels", "messages", "explore"] }, link: { type: "string", description: "Optional instagram.com post or reel link to show inside Jarvis" } }) },
   { name: "set_volume", description: "Change the computer's system volume. Each step is about 2%. Use mute to toggle mute.", schema: obj({ action: { type: "string", enum: ["up", "down", "mute"] }, steps: { type: "integer", description: "1-25, default 5" } }, ["action"]) }
 ].map(t => ({ ...t, run: inp => runTool(t.name, inp) }));
 async function runTool(name, inp) {
@@ -1163,6 +1186,11 @@ async function runTool(name, inp) {
     if (inp.action === "close") { ytClose(); return { ok: true }; }
     if (!yt.id && !yt.list) return { error: "No video is open." };
     ytCommand(inp.action === "pause" ? "pauseVideo" : "playVideo"); yt.playing = inp.action !== "pause"; return { ok: true };
+  }
+  if (name === "open_instagram") {
+    if (inp.link && showInstagramPost(String(inp.link))) { $("igPanel").scrollIntoView({ behavior: "smooth", block: "center" }); return { ok: true }; }
+    openInstagram({ feed: "", reels: "reels/", messages: "direct/inbox/", explore: "explore/" }[inp.section] || "");
+    return { ok: true, note: "If no window appeared, the browser blocked the pop-up; the user can click Feed in the Instagram panel." };
   }
   if (name === "set_volume") {
     const action = ["up", "down", "mute"].includes(inp.action) ? inp.action : "up";
@@ -2167,6 +2195,30 @@ $("ytLink").addEventListener("keydown", e => { if (e.key === "Enter") ytGo(); })
 $("ytLink").addEventListener("input", () => { $("ytPlay").textContent = /youtu\.?be/.test($("ytLink").value) ? "Play" : "Search"; });
 $("ytStop").addEventListener("click", ytClose);
 renderYtRecent();
+
+/* ---------- Instagram ---------- */
+let igWin = null;
+function openInstagram(path) {
+  const url = "https://www.instagram.com/" + (path || "");
+  const w = 460, h = Math.min(screen.availHeight || 900, 940);
+  const left = Math.max(0, (screen.availWidth || 1400) - w - 10), top = 10;
+  try { if (igWin && !igWin.closed) { igWin.location.href = url; igWin.focus(); } else igWin = window.open(url, "jarvis-instagram", `popup=yes,width=${w},height=${h},left=${left},top=${top}`); } catch { igWin = null; }
+  if (!igWin) { window.open(url, "_blank", "noopener"); }
+  $("igState").textContent = "open in its own window"; log("Instagram opened", "INSTAGRAM");
+  return true;
+}
+function showInstagramPost(v) {
+  const m = /instagram\.com\/(?:[\w.]+\/)?(p|reel|reels|tv)\/([\w-]{5,})/.exec(String(v || ""));
+  if (!m) { $("igState").textContent = "paste a post or reel link"; return false; }
+  const kind = m[1] === "reels" ? "reel" : m[1];
+  $("igFrame").src = `https://www.instagram.com/${kind}/${m[2]}/embed/captioned/`;
+  $("igView").hidden = false; $("igState").textContent = kind === "reel" ? "reel" : "post";
+  log("Showing Instagram " + (kind === "reel" ? "reel" : "post"), "INSTAGRAM");
+  return true;
+}
+document.querySelectorAll("[data-ig]").forEach(b => b.addEventListener("click", () => openInstagram(b.dataset.ig)));
+$("igShow").addEventListener("click", () => { if (showInstagramPost($("igLink").value)) $("igLink").value = ""; });
+$("igLink").addEventListener("keydown", e => { if (e.key === "Enter") $("igShow").click(); });
 
 renderBrief();
 setTimeout(briefCheck, 3000);

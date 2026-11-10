@@ -39,7 +39,7 @@ CSP = "; ".join([
     "connect-src 'self' https://api.anthropic.com https://api.openai.com https://accounts.spotify.com "
     "https://api.spotify.com https://cdn.jsdelivr.net https://storage.googleapis.com "
     "https://docs.googleapis.com https://slides.googleapis.com https://www.googleapis.com https://accounts.google.com/gsi/",
-    "frame-src https://docs.google.com https://accounts.google.com https://www.youtube-nocookie.com https://www.youtube.com",
+    "frame-src https://docs.google.com https://accounts.google.com https://www.youtube-nocookie.com https://www.youtube.com https://www.instagram.com",
     "img-src 'self' data: blob: https://*.scdn.co https://*.spotifycdn.com https://*.googleusercontent.com https://i.ytimg.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src https://fonts.gstatic.com",

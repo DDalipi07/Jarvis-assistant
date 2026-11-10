@@ -20,6 +20,7 @@ Bring your own AI: it works with a **Claude (Anthropic)** or **OpenAI** API key,
 | 📝 **Workspace (Google Docs & Slides)** | Write in Google Docs and Slides right inside Jarvis, or ask Jarvis to write a section of your essay or build a whole slide deck (with speaker notes) from one sentence. |
 | 🌍 **Live dashboard** | A rotating holographic globe with continent labels and glowing network arcs, plus live charts for your stocks (Yahoo Finance, refreshed every minute). |
 | 📺 **YouTube** | A YouTube screen inside Jarvis: search for videos, paste a link, or ask "play lo-fi study music" and Jarvis finds and plays it. An open palm pauses and resumes. |
+| 📸 **Instagram** | One-click Feed, Reels, Messages and Explore in a window beside Jarvis, and paste any post or reel link to watch it inside Jarvis. |
 | 📁 **Files** | Browse folders you choose (like your uni folder), search them, preview PDFs and images, and open files on your computer, or just ask Jarvis to find and open one. Read-only. |
 | 🔊 **Volume** | Change your computer's volume with a pinch gesture or by asking. |
 
