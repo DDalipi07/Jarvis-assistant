@@ -210,6 +210,55 @@ def fetch_stock(symbol):
     return out
 
 
+# ---------------- YouTube search (reads YouTube's public results page, no key needed) ----------------
+_yt_cache = {}
+
+
+def _walk_videos(node, out):
+    if isinstance(node, dict):
+        v = node.get("videoRenderer")
+        if isinstance(v, dict) and v.get("videoId"):
+            def txt(x):
+                if not isinstance(x, dict):
+                    return ""
+                return x.get("simpleText") or "".join(r.get("text", "") for r in x.get("runs", []))
+            out.append({"id": v["videoId"], "title": txt(v.get("title")), "channel": txt(v.get("ownerText") or v.get("longBylineText")),
+                        "length": txt(v.get("lengthText")), "views": txt(v.get("shortViewCountText") or v.get("viewCountText")),
+                        "published": txt(v.get("publishedTimeText"))})
+        for val in node.values():
+            _walk_videos(val, out)
+    elif isinstance(node, list):
+        for val in node:
+            _walk_videos(val, out)
+
+
+def parse_youtube_results(html):
+    m = re.search(r"(?:var ytInitialData|window\[\"ytInitialData\"\])\s*=\s*(\{.*?\});\s*</script>", html, re.S)
+    if not m:
+        return []
+    out, seen = [], set()
+    _walk_videos(json.loads(m.group(1)), out)
+    return [v for v in out if not (v["id"] in seen or seen.add(v["id"]))]
+
+
+def youtube_search(query):
+    import urllib.request
+    key = query.strip().lower()
+    hit = _yt_cache.get(key)
+    if hit and time.time() - hit[0] < 600:
+        return hit[1]
+    url = "https://www.youtube.com/results?hl=en&search_query=" + urllib.parse.quote_plus(query.strip())
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cookie": "SOCS=CAI; CONSENT=YES+1"})  # skips the EU cookie-consent page
+    with urllib.request.urlopen(req, timeout=12) as r:
+        html = r.read().decode("utf-8", "replace")
+    results = parse_youtube_results(html)[:20]
+    _yt_cache[key] = (time.time(), results)
+    return results
+
+
 # ---------------- your folders (read-only browsing, open on this computer) ----------------
 FILE_TOKEN = secrets.token_urlsafe(24)  # changes every time the server starts; lets the page open previews
 BLOCK_OPEN = {".exe", ".bat", ".cmd", ".com", ".ps1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh", ".msi", ".msp",
@@ -449,6 +498,14 @@ class JarvisHandler(http.server.SimpleHTTPRequestHandler):
                     return self.send_json(401, {"ok": False, "error": "Gmail refused the login: " + str(e)})
                 except Exception as e:
                     return self.send_json(502, {"ok": False, "error": "Couldn't reach Gmail: " + str(e)})
+            if self.path.startswith("/api/youtube/search"):
+                q = self.query().get("q", "").strip()[:120]
+                if not q:
+                    return self.send_json(400, {"ok": False, "error": "Type something to search for."})
+                try:
+                    return self.send_json(200, {"ok": True, "results": youtube_search(q)})
+                except Exception as e:
+                    return self.send_json(502, {"ok": False, "error": "Couldn't reach YouTube: " + str(e)})
             if self.path.startswith("/api/stocks"):
                 syms = [x.strip().upper() for x in self.query().get("symbols", "").split(",") if x.strip()][:8]
                 syms = [x for x in syms if re.fullmatch(r"[A-Z0-9.^=-]{1,12}", x)]

@@ -212,6 +212,14 @@ form.ask input{flex:1}
 .yt-bar{display:flex;gap:8px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--line)}
 .yt-bar input{flex:1;min-width:0}
 .yt-empty{aspect-ratio:16/9;max-width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--muted);text-align:center;padding:20px;background:var(--panel-2)}
+.yt-results{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;padding:12px 14px;max-height:520px;overflow-y:auto;border-top:1px solid var(--line)}
+.yt-res{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:0;cursor:pointer;text-align:left;color:var(--text);overflow:hidden;min-width:0}
+.yt-res:hover,.yt-res:focus-visible{border-color:var(--cyan);outline:none}
+.yt-res .th{position:relative}
+.yt-res img{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;background:#000}
+.yt-res .len{position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,.8);color:#fff;font:11px var(--f-mono);padding:1px 5px;border-radius:3px}
+.yt-res .tt{display:block;padding:8px 10px 2px;font:13px/1.35 var(--f-body);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.yt-res small{display:block;padding:0 10px 9px;font:11px var(--f-mono);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .yt-recent{display:flex;gap:8px;overflow-x:auto;padding:10px 14px 12px}
 .yt-recent button{flex:none;width:120px;background:none;border:1px solid var(--line);border-radius:4px;padding:0;cursor:pointer;color:var(--muted);font:11px var(--f-mono);text-align:left;overflow:hidden}
 .yt-recent button:hover{border-color:var(--cyan)}
@@ -298,12 +306,13 @@ form.ask input{flex:1}
     <section class="panel" id="ytPanel">
       <div class="ph"><span>YouTube</span><em id="ytState">nothing playing</em></div>
       <div class="yt-bar">
-        <input type="text" id="ytLink" placeholder="Paste a YouTube link, or ask Jarvis: “play lo-fi study music”" aria-label="YouTube link" autocomplete="off">
-        <button class="btn" id="ytPlay" type="button">Play</button>
+        <input type="search" id="ytLink" placeholder="Search YouTube or paste a link" aria-label="Search YouTube or paste a link" autocomplete="off">
+        <button class="btn" id="ytPlay" type="button">Search</button>
         <button class="btn ghost" id="ytStop" type="button" hidden>Close</button>
       </div>
       <iframe class="yt-frame" id="ytFrame" title="YouTube video" hidden allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
-      <div class="yt-empty" id="ytEmpty"><b style="color:var(--text);font-weight:500">Watch YouTube right here</b><span>Paste a video or playlist link, or say “Jarvis, play a video about marketing strategy”.</span></div>
+      <div class="yt-empty" id="ytEmpty"><b style="color:var(--text);font-weight:500">Watch YouTube right here</b><span>Search for anything above, paste a link, or say “Jarvis, play lo-fi study music”.</span></div>
+      <div class="yt-results" id="ytResults" hidden></div>
       <div class="yt-recent" id="ytRecent"></div>
     </section>
     </div>
@@ -1072,7 +1081,7 @@ function nowLine() {
 function systemPrompt() {
   return `You are JARVIS, the user's personal assistant: calm, quick, polite, a little dry and witty, like a refined British butler.${prefs.name ? " The user's name is " + prefs.name + "." : ""}${prefs.city ? " The user lives in " + prefs.city + "." : ""}
 Current local time: ${nowLine()}.
-You can: set alarms, reminders and timers (add_item, list_items, remove_item), control Spotify (spotify_control, now_playing), change the computer volume (set_volume), check school assignments and deadlines (get_school_tasks), find and open files in the user's shared folders (find_files, open_file), write Google Docs and build Google Slides (write_document, make_presentation), play YouTube videos in Jarvis (play_youtube, youtube_control; find links with web_search), and search the web for news, stock prices, weather and facts (web_search).
+You can: set alarms, reminders and timers (add_item, list_items, remove_item), control Spotify (spotify_control, now_playing), change the computer volume (set_volume), check school assignments and deadlines (get_school_tasks), find and open files in the user's shared folders (find_files, open_file), write Google Docs and build Google Slides (write_document, make_presentation), search and play YouTube videos in Jarvis (search_youtube, play_youtube, youtube_control); when asked to play something, search_youtube then play the best match, and search the web for news, stock prices, weather and facts (web_search).
 Rules:
 - Replies are spoken aloud: 1-4 short sentences, plain text, no markdown, no lists, no URLs.
 - Resolve relative times ("in 10 minutes", "tomorrow at 7") from the current local time. If an alarm has no time, ask one short question.
@@ -1092,7 +1101,8 @@ const TOOLS = [
   { name: "open_file", description: "Open a file or folder from find_files on the user's computer with its normal app (Word, PDF reader, Explorer).", schema: obj({ root: { type: "integer" }, path: { type: "string" } }, ["root", "path"]) },
   { name: "write_document", description: "Write text into a Google Doc for the user (essay, notes, summary, report section...). Creates a new doc unless one is open in the Workspace. Can research the web first.", schema: obj({ instruction: { type: "string", description: "What to write, with any length, tone or structure the user asked for" }, research: { type: "boolean" } }, ["instruction"]) },
   { name: "make_presentation", description: "Build a Google Slides presentation for the user on a topic (titles, bullets, speaker notes).", schema: obj({ topic: { type: "string" }, slides: { type: "integer", description: "Number of slides, default 8" }, research: { type: "boolean" } }, ["topic"]) },
-  { name: "play_youtube", description: "Play a YouTube video or playlist in Jarvis's YouTube screen. To find something by topic, use web_search first to get a youtube.com/watch or youtu.be link, then call this.", schema: obj({ url: { type: "string", description: "YouTube link or 11-character video id" }, title: { type: "string" } }, ["url"]) },
+  { name: "search_youtube", description: "Search YouTube and show the results on the user's YouTube screen. Returns video ids, titles, channels and lengths.", schema: obj({ query: { type: "string" } }, ["query"]) },
+  { name: "play_youtube", description: "Play a YouTube video or playlist in Jarvis's YouTube screen, by link or video id (use search_youtube to find one).", schema: obj({ url: { type: "string", description: "YouTube link or 11-character video id" }, title: { type: "string" } }, ["url"]) },
   { name: "youtube_control", description: "Pause, resume or close the YouTube video in Jarvis.", schema: obj({ action: { type: "string", enum: ["pause", "play", "close"] } }, ["action"]) },
   { name: "set_volume", description: "Change the computer's system volume. Each step is about 2%. Use mute to toggle mute.", schema: obj({ action: { type: "string", enum: ["up", "down", "mute"] }, steps: { type: "integer", description: "1-25, default 5" } }, ["action"]) }
 ].map(t => ({ ...t, run: inp => runTool(t.name, inp) }));
@@ -1139,6 +1149,10 @@ async function runTool(name, inp) {
       if (name === "write_document") { setTab("docs"); const o = await writeDoc(String(inp.instruction || ""), inp.research !== false); openInWorkspace(o.it); return { ok: true, document: o.it.name }; }
       setTab("slides"); const o = await makeSlides(String(inp.topic || ""), Math.max(3, Math.min(20, Number(inp.slides) || 8)), inp.research !== false); openInWorkspace(o.it); return { ok: true, presentation: o.it.name, slides: o.slides };
     } catch (e) { return { error: e.message }; }
+  }
+  if (name === "search_youtube") {
+    try { const q = String(inp.query || ""); $("ytLink").value = q; const list = await searchYouTube(q); showYtResults(list, q); $("ytPanel").scrollIntoView({ behavior: "smooth", block: "start" }); return list.slice(0, 8).map(v => ({ id: v.id, title: v.title, channel: v.channel, length: v.length, views: v.views })); }
+    catch (e) { return { error: e.message }; }
   }
   if (name === "play_youtube") {
     const ok = playYouTube(String(inp.url || ""), inp.title ? String(inp.title) : "");
@@ -2122,8 +2136,35 @@ function ytCommand(func) {
 }
 function ytToggle() { if (!yt.id && !yt.list) return false; ytCommand(yt.playing ? "pauseVideo" : "playVideo"); yt.playing = !yt.playing; log(yt.playing ? "Video playing" : "Video paused", "YOUTUBE"); return true; }
 function ytClose() { $("ytFrame").src = "about:blank"; $("ytFrame").hidden = true; $("ytEmpty").hidden = false; $("ytStop").hidden = true; yt.id = yt.list = null; yt.playing = false; $("ytState").textContent = "nothing playing"; }
-$("ytPlay").addEventListener("click", () => { if (playYouTube($("ytLink").value)) $("ytLink").value = ""; else log("Paste a YouTube video or playlist link", "YOUTUBE"); });
-$("ytLink").addEventListener("keydown", e => { if (e.key === "Enter") $("ytPlay").click(); });
+async function searchYouTube(q) {
+  const r = await api("/api/youtube/search?q=" + encodeURIComponent(q));
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || (r.status === 404 ? "Restart Jarvis with the new jarvis_server.py to search YouTube." : "HTTP " + r.status));
+  return j.results || [];
+}
+function showYtResults(list, q) {
+  const box = $("ytResults"); box.textContent = ""; box.hidden = false;
+  if (!list.length) { box.append(mkEl("div", "empty", `No videos found for “${q}”.`)); return; }
+  for (const v of list) {
+    const b = mkEl("button", "yt-res"); b.type = "button"; b.title = v.title;
+    const th = mkEl("div", "th"); const img = mkEl("img"); img.alt = ""; img.loading = "lazy"; img.src = `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`; th.append(img);
+    if (v.length) th.append(mkEl("span", "len", v.length));
+    b.append(th, mkEl("span", "tt", v.title || "Video"), mkEl("small", "", [v.channel, v.views, v.published].filter(Boolean).join(" · ")));
+    b.onclick = () => { playYouTube({ id: v.id, list: null }, v.title); $("ytFrame").scrollIntoView({ behavior: "smooth", block: "center" }); };
+    box.append(b);
+  }
+}
+async function ytGo() {
+  const v = $("ytLink").value.trim(); if (!v) { $("ytLink").focus(); return; }
+  if (/youtu\.?be|^[\w-]{11}$/.test(v) && parseYouTube(v)) { playYouTube(v); $("ytLink").value = ""; return; }
+  $("ytPlay").disabled = true; $("ytPlay").textContent = "Searching…"; $("ytState").textContent = "searching…";
+  try { showYtResults(await searchYouTube(v), v); $("ytState").textContent = yt.id ? $("ytState").textContent : "results for “" + v.slice(0, 24) + "”"; }
+  catch (e) { const box = $("ytResults"); box.hidden = false; box.textContent = ""; box.append(mkEl("div", "empty", e.message)); $("ytState").textContent = "search failed"; }
+  finally { $("ytPlay").disabled = false; $("ytPlay").textContent = "Search"; }
+}
+$("ytPlay").addEventListener("click", ytGo);
+$("ytLink").addEventListener("keydown", e => { if (e.key === "Enter") ytGo(); });
+$("ytLink").addEventListener("input", () => { $("ytPlay").textContent = /youtu\.?be/.test($("ytLink").value) ? "Play" : "Search"; });
 $("ytStop").addEventListener("click", ytClose);
 renderYtRecent();
 
