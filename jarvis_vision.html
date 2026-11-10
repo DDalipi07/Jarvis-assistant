@@ -376,7 +376,10 @@ form.ask input{flex:1}
           <div class="crumbs" id="crumbs"></div>
           <div style="padding:0 14px 10px"><input type="text" id="fileSearch" placeholder="Search this folder…" aria-label="Search files" autocomplete="off" style="width:100%"></div>
           <div class="flist" id="fileList"></div>
-          <div style="padding:8px 14px 12px"><button class="linkbtn" id="removeFolder" type="button">Stop sharing this folder with Jarvis</button></div>
+          <div style="padding:8px 14px 12px;display:flex;flex-direction:column;gap:8px;align-items:flex-start">
+            <label style="display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--dim);cursor:pointer"><input type="checkbox" id="filesAi" style="margin-top:2px"> <span>Let the AI search these files for me (sends file <b>names</b> to your AI provider when you ask; file contents never leave this computer)</span></label>
+            <button class="linkbtn" id="removeFolder" type="button">Stop sharing this folder with Jarvis</button>
+          </div>
         </div>
         <div class="empty" id="filesMsg" hidden></div>
       </section>
@@ -1155,6 +1158,9 @@ async function runTool(name, inp) {
     if (!schoolReady) return { error: "School emails aren't connected yet." };
     return upcomingSchool().map(t => ({ course: t.course, title: t.title, due: typeof t.due === "number" ? localISO(t.due) : (t.dueText || "no due date"), detail: t.detail }));
   }
+  if ((name === "find_files" || name === "open_file") && lsGet("jarvis-files-ai") !== "1") {
+    return { error: "File access for the AI is turned off. The user can turn it on with the checkbox in the Files panel." };
+  }
   if (name === "find_files") {
     if (!files.roots.length) return { error: "No folders are shared with Jarvis yet. The user can add one in the Files panel." };
     const out = [];
@@ -1607,6 +1613,8 @@ setInterval(() => { renderSchool(); if (schoolReady && apiKey && Date.now() - (s
 setTimeout(initSchool, 1500);
 
 /* ---------- files: browse folders you choose (read-only), open them on this computer ---------- */
+$("filesAi").checked = lsGet("jarvis-files-ai") === "1";
+$("filesAi").addEventListener("change", e => lsSet("jarvis-files-ai", e.target.checked ? "1" : null));
 const files = { roots: [], root: 0, path: "", token: "", searchT: null };
 const PREVIEW = /\.(pdf|png|jpe?g|gif|webp|bmp|txt|md|csv|json|mp3|wav|m4a|ogg|mp4|webm|mov)$/i;
 function fileKind(e) {

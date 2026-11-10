@@ -20,6 +20,7 @@ import re
 import secrets
 import time
 import urllib.parse
+import socket
 import socketserver
 import subprocess
 import sys
@@ -680,13 +681,23 @@ class JarvisHandler(http.server.SimpleHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         # Keep the window quiet: only show page loads
-        if "/api/" not in (str(args[0]) if args else ""):
+        line = str(args[0]) if args else ""
+        if "/api/" not in line and "/files/" not in line:  # never print file names or the preview secret
             super().log_message(fmt, *args)
 
 
 class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
-    allow_reuse_address = True
+    # On Windows, "reuse address" would let another program grab the same port, so it's only used elsewhere.
+    allow_reuse_address = sys.platform != "win32"
+
+    def server_bind(self):
+        if sys.platform == "win32" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+    def verify_request(self, request, client_address):
+        return client_address[0] in ("127.0.0.1", "::1")  # only this computer, ever
 
 
 if __name__ == "__main__":
