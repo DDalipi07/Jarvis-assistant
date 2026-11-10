@@ -1471,16 +1471,21 @@ function renderCrumbs() {
   const b = mkEl("button", "", root.name); b.type = "button"; b.onclick = () => listFolder(""); c.append(b);
   parts.forEach((p, i) => { c.append(mkEl("span", "", "/")); const x = mkEl("button", "", p); x.type = "button"; x.onclick = () => listFolder(parts.slice(0, i + 1).join("/")); c.append(x); });
 }
-async function listFolder(path) {
-  files.path = path || ""; $("fileSearch").value = ""; renderCrumbs();
-  const list = $("fileList"); list.textContent = ""; list.append(mkEl("div", "empty", "Loading…"));
+async function listFolder(path, quiet) {
+  const list = $("fileList");
+  if (!quiet) { files.path = path || ""; $("fileSearch").value = ""; renderCrumbs(); list.textContent = ""; list.append(mkEl("div", "empty", "Loading…")); }
   try {
     const r = await api(`/api/files/list?root=${files.root}&path=${encodeURIComponent(files.path)}`); const j = await r.json();
     if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
+    const sig = JSON.stringify(j.items.map(e => [e.name, e.modified, e.size]));
+    if (quiet && sig === files.sig) return;
+    files.sig = sig;
+    const scroll = list.scrollTop;
     list.textContent = "";
     if (!j.items.length) list.append(mkEl("div", "empty", "This folder is empty."));
     j.items.forEach(e => list.append(fileRow(e, false)));
-  } catch (e) { list.textContent = ""; list.append(mkEl("div", "empty", "Couldn't open this folder: " + e.message)); }
+    if (quiet) { list.scrollTop = scroll; log("Folder updated", "FILES"); }
+  } catch (e) { if (quiet) return; list.textContent = ""; list.append(mkEl("div", "empty", "Couldn't open this folder: " + e.message)); }
 }
 async function searchFiles(q) {
   if (!q.trim()) return listFolder(files.path);
@@ -1538,6 +1543,11 @@ $("removeFolder").addEventListener("click", async () => {
   log("Stopped sharing " + root.name, "FILES"); files.root = 0; filesInit();
 });
 setTimeout(filesInit, 1200);
+// Live view: every few seconds, check the open folder for new, changed or deleted files.
+setInterval(() => {
+  if (document.hidden || !files.roots.length || $("filesBrowser").hidden || $("fileSearch").value.trim()) return;
+  listFolder(files.path, true);
+}, 4000);
 
 renderBrief();
 setTimeout(briefCheck, 3000);
