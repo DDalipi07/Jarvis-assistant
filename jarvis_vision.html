@@ -196,6 +196,18 @@ form.ask input{flex:1}
 .ws-ai{display:flex;gap:8px;flex-wrap:wrap;padding:12px;border-top:1px solid var(--line);align-items:center}
 .ws-ai input[type=text]{flex:1;min-width:200px}
 .ws-ai select{width:auto}
+.globe-cv{display:block;width:100%;height:420px;cursor:grab;touch-action:none}
+.globe-cv:active{cursor:grabbing}
+.mkt-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--line)}
+@media (max-width:520px){.mkt-grid{grid-template-columns:1fr}}
+.mkt{background:var(--panel);padding:10px 14px 12px;min-width:0}
+.mkt-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.mkt-head b{font:500 13px var(--f-mono);letter-spacing:.1em}
+.mkt-price{font:16px var(--f-mono);font-variant-numeric:tabular-nums}
+.mkt-chg{font:12px var(--f-mono);font-variant-numeric:tabular-nums}
+.mkt-chg.up{color:var(--green)} .mkt-chg.down{color:var(--red)}
+.mkt-cv{display:block;width:100%;height:90px;margin-top:6px}
+.mkt small{display:block;font:10px var(--f-mono);color:var(--muted);margin-top:4px}
 .tog{display:flex;align-items:center;gap:6px;font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;color:var(--muted);text-transform:none;cursor:pointer}
 </style>
 </head>
@@ -261,6 +273,17 @@ form.ask input{flex:1}
     <section class="panel">
       <div class="ph"><span>Activity</span></div>
       <div class="log" id="log"><div>Standing by.</div></div>
+    </section>
+
+    <section class="panel">
+      <div class="ph"><span>Global network</span><em id="globeTime">--:-- UTC</em></div>
+      <canvas class="globe-cv" id="globeCv" aria-label="Rotating globe with continent labels. Drag to turn it."></canvas>
+    </section>
+
+    <section class="panel">
+      <div class="ph"><span>Markets · live</span><em id="mktTime">connecting…</em></div>
+      <div class="mkt-grid" id="mktGrid"></div>
+      <div class="bsrc">Prices from Yahoo Finance, may be delayed up to 15 minutes. Facts only, not investment advice.</div>
     </section>
     </div>
 
@@ -1870,6 +1893,162 @@ $("wsGo").addEventListener("click", async () => {
 $("wsAsk").addEventListener("keydown", e => { if (e.key === "Enter") $("wsGo").click(); });
 $("gClient").value = gClientId();
 showGState(); setTab("docs");
+
+/* ---------- holographic globe: rotating dot-matrix Earth with continent labels ---------- */
+(function globe() {
+  const cv = $("globeCv"), ctx = cv.getContext("2d");
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const LAND = [
+    [[-168,65],[-140,70],[-95,72],[-80,63],[-60,55],[-55,48],[-70,43],[-76,35],[-81,25],[-97,26],[-97,19],[-88,15],[-80,8],[-85,12],[-105,20],[-112,30],[-118,34],[-124,40],[-124,48],[-135,58],[-152,58],[-165,60]],
+    [[-50,60],[-42,60],[-20,70],[-20,80],[-60,82],[-70,76],[-55,68]],
+    [[-80,10],[-60,10],[-50,0],[-35,-5],[-40,-22],[-48,-28],[-58,-38],[-65,-55],[-72,-50],[-73,-38],[-71,-18],[-81,-5]],
+    [[-10,36],[-9,43],[-2,44],[-5,48],[2,51],[5,53],[8,57],[5,61],[10,64],[15,69],[25,71],[40,68],[45,60],[40,50],[30,45],[28,41],[22,37],[15,40],[12,44],[8,44],[3,42],[-5,36]],
+    [[-6,50],[2,51],[0,53],[-2,57],[-5,58],[-6,55]],
+    [[-17,21],[-12,28],[-6,35],[10,37],[20,32],[32,31],[35,28],[43,12],[51,12],[42,-2],[40,-15],[35,-25],[20,-35],[17,-29],[12,-17],[13,-5],[9,4],[-8,4],[-16,12]],
+    [[44,-13],[50,-15],[48,-25],[44,-22]],
+    [[28,41],[36,36],[35,30],[43,13],[52,16],[57,23],[60,25],[67,24],[73,20],[77,8],[80,14],[88,22],[92,22],[98,16],[99,8],[104,1],[104,10],[106,17],[109,21],[117,24],[122,30],[120,38],[125,40],[130,43],[140,48],[141,53],[135,55],[140,60],[155,60],[163,62],[180,66],[180,70],[140,72],[110,77],[80,73],[70,68],[60,68],[45,60],[40,50],[30,45]],
+    [[130,31],[141,35],[142,41],[140,45],[138,37]],
+    [[95,5],[106,-6],[115,-8],[120,-9],[130,-8],[140,-5],[150,-6],[140,0],[125,1],[118,5],[109,2],[100,0]],
+    [[114,-22],[122,-18],[130,-12],[137,-12],[142,-11],[146,-19],[153,-26],[150,-37],[141,-38],[135,-35],[129,-32],[115,-34]],
+    [[172,-41],[178,-38],[175,-41],[168,-46],[170,-44]],
+    [[-180,-70],[-90,-72],[0,-69],[90,-67],[180,-70],[180,-90],[-180,-90]]
+  ];
+  const LABELS = [["North America", -100, 47], ["South America", -60, -15], ["Europe", 15, 53], ["Africa", 20, 6], ["Asia", 95, 47], ["Oceania", 134, -25], ["Antarctica", 0, -78]];
+  const CITIES = [[21.17, 42.66], [-74, 40.7], [-0.1, 51.5], [139.7, 35.7], [103.8, 1.35], [-46.6, -23.5], [151.2, -33.9], [55.3, 25.2], [-122.4, 37.8], [28.98, 41.0]];
+  const inPoly = (x, y, poly) => { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, yi] = poly[i], [xj, yj] = poly[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; };
+  const dots = [];
+  for (let lat = -84; lat <= 84; lat += 3) {
+    const step = 3 / Math.max(0.25, Math.cos(lat * Math.PI / 180));
+    for (let lon = -180; lon < 180; lon += step) if (LAND.some(p => inPoly(lon, lat, p))) dots.push([lon, lat]);
+  }
+  let rot = -20, tilt = 18, drag = null, arcs = [], lastArc = 0, last = performance.now();
+  const rad = d => d * Math.PI / 180;
+  function project(lon, lat, R, cx, cy) {
+    const l = rad(lon + rot), p = rad(lat), t = rad(tilt);
+    const x = Math.cos(p) * Math.sin(l), y0 = Math.sin(p), z0 = Math.cos(p) * Math.cos(l);
+    const y = y0 * Math.cos(t) - z0 * Math.sin(t), z = y0 * Math.sin(t) + z0 * Math.cos(t);
+    return [cx + x * R, cy - y * R, z];
+  }
+  function size() { const d = Math.min(2, devicePixelRatio || 1), r = cv.getBoundingClientRect(); cv.width = Math.round(r.width * d) || 600; cv.height = Math.round(r.height * d) || 420; }
+  size(); addEventListener("resize", size);
+  cv.addEventListener("pointerdown", e => { drag = { x: e.clientX, y: e.clientY, rot, tilt }; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener("pointermove", e => { if (drag) { rot = drag.rot + (e.clientX - drag.x) * 0.4; tilt = Math.max(-60, Math.min(60, drag.tilt + (e.clientY - drag.y) * 0.3)); } });
+  cv.addEventListener("pointerup", () => { drag = null; });
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (!drag && !document.hidden) rot += dt * (reduce ? 1 : 8);
+    const W = cv.width, H = cv.height, dpr = W / (cv.getBoundingClientRect().width || W);
+    const R = Math.min(W, H) * 0.38, cx = W / 2, cy = H / 2;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H);
+    const g = ctx.createRadialGradient(cx, cy, R * 0.9, cx, cy, R * 1.35);
+    g.addColorStop(0, "rgba(79,214,255,0.22)"); g.addColorStop(1, "rgba(79,214,255,0)");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, R * 1.35, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(8,24,38,0.9)"; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+    ctx.lineWidth = 1 * dpr;
+    for (let lat = -60; lat <= 60; lat += 30) { ctx.beginPath(); let first = true; for (let lon = -180; lon <= 180; lon += 6) { const [x, y, z] = project(lon, lat, R, cx, cy); if (z < 0) { first = true; continue; } first ? ctx.moveTo(x, y) : ctx.lineTo(x, y); first = false; } ctx.strokeStyle = "rgba(79,214,255,0.10)"; ctx.stroke(); }
+    for (let lon = -180; lon < 180; lon += 30) { ctx.beginPath(); let first = true; for (let lat = -90; lat <= 90; lat += 6) { const [x, y, z] = project(lon, lat, R, cx, cy); if (z < 0) { first = true; continue; } first ? ctx.moveTo(x, y) : ctx.lineTo(x, y); first = false; } ctx.strokeStyle = "rgba(79,214,255,0.08)"; ctx.stroke(); }
+    for (const [lon, lat] of dots) {
+      const [x, y, z] = project(lon, lat, R, cx, cy); if (z <= 0) continue;
+      ctx.fillStyle = `rgba(79,214,255,${0.25 + z * 0.7})`; ctx.fillRect(x - dpr, y - dpr, 1.8 * dpr, 1.8 * dpr);
+    }
+    if (now - lastArc > 1400 && !reduce) {
+      lastArc = now; const a = CITIES[Math.floor(Math.random() * CITIES.length)]; let b = a; while (b === a) b = CITIES[Math.floor(Math.random() * CITIES.length)];
+      arcs.push({ a, b, t0: now }); if (arcs.length > 6) arcs.shift();
+    }
+    for (const arc of arcs) {
+      const p = Math.min(1, (now - arc.t0) / 1600), fade = Math.max(0, 1 - (now - arc.t0 - 1600) / 2000);
+      if (fade <= 0) continue;
+      ctx.beginPath(); let drew = false;
+      const N = 40;
+      for (let i = 0; i <= N * p; i++) {
+        const f = i / N, lon = arc.a[0] + (arc.b[0] - arc.a[0]) * f, lat = arc.a[1] + (arc.b[1] - arc.a[1]) * f, lift = 1 + Math.sin(f * Math.PI) * 0.18;
+        const [x, y, z] = project(lon, lat, R * lift, cx, cy);
+        if (z < 0) { drew = false; continue; } drew ? ctx.lineTo(x, y) : ctx.moveTo(x, y); drew = true;
+      }
+      ctx.strokeStyle = `rgba(255,181,71,${0.8 * fade})`; ctx.lineWidth = 1.5 * dpr; ctx.shadowBlur = 8 * dpr; ctx.shadowColor = "rgba(255,181,71,0.8)"; ctx.stroke(); ctx.shadowBlur = 0;
+    }
+    for (const [lon, lat] of CITIES) {
+      const [x, y, z] = project(lon, lat, R, cx, cy); if (z <= 0.05) continue;
+      const pulse = (((now / 1200 + lon) % 1) + 1) % 1;
+      ctx.strokeStyle = `rgba(255,181,71,${(1 - pulse) * z})`; ctx.lineWidth = 1 * dpr; ctx.beginPath(); ctx.arc(x, y, (2 + pulse * 8) * dpr, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = "#ffb547"; ctx.beginPath(); ctx.arc(x, y, 2 * dpr, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.font = `${11 * dpr}px "IBM Plex Mono", monospace`; ctx.textBaseline = "middle";
+    for (const [name, lon, lat] of LABELS) {
+      const [x, y, z] = project(lon, lat, R, cx, cy); if (z < 0.2) continue;
+      const lx = x + (x >= cx ? 26 : -26) * dpr, ly = y - 14 * dpr, al = Math.min(1, (z - 0.2) * 2.5);
+      ctx.strokeStyle = `rgba(214,230,241,${0.45 * al})`; ctx.lineWidth = 1 * dpr; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(lx, ly); ctx.stroke();
+      ctx.fillStyle = `rgba(214,230,241,${al})`; ctx.textAlign = x >= cx ? "left" : "right";
+      ctx.fillText(name.toUpperCase(), lx + (x >= cx ? 4 : -4) * dpr, ly);
+    }
+    const scan = (now / 3000) % 1;
+    ctx.strokeStyle = `rgba(79,214,255,${0.35 * (1 - scan)})`; ctx.lineWidth = 1 * dpr; ctx.beginPath(); ctx.arc(cx, cy, R * (1 + scan * 0.3), 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = "rgba(79,214,255,0.5)"; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+  setInterval(() => { $("globeTime").textContent = new Date().toLocaleTimeString("en-GB", { timeZone: "UTC", hour: "2-digit", minute: "2-digit" }) + " UTC"; }, 1000);
+})();
+
+/* ---------- live markets: digital charts for the stocks in Settings ---------- */
+const markets = { data: {}, failed: [], at: 0 };
+function drawSpark(cv, q) {
+  const ctx = cv.getContext("2d"), d = Math.min(2, devicePixelRatio || 1), r = cv.getBoundingClientRect();
+  cv.width = Math.round(r.width * d) || 300; cv.height = Math.round(r.height * d) || 90;
+  const W = cv.width, H = cv.height, pad = 6 * d, pts = q.points;
+  ctx.clearRect(0, 0, W, H);
+  ctx.strokeStyle = "rgba(79,214,255,0.07)"; ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(0, H * i / 4); ctx.lineTo(W, H * i / 4); ctx.stroke(); }
+  for (let i = 1; i < 8; i++) { ctx.beginPath(); ctx.moveTo(W * i / 8, 0); ctx.lineTo(W * i / 8, H); ctx.stroke(); }
+  const vals = pts.map(p => p[1]).concat(q.prev ? [q.prev] : []);
+  const lo = Math.min(...vals), hi = Math.max(...vals), span = hi - lo || 1;
+  const X = i => pad + (W - 2 * pad) * i / (pts.length - 1), Y = v => H - pad - (H - 2 * pad) * (v - lo) / span;
+  const up = (q.change || 0) >= 0, col = up ? "91,227,166" : "255,107,107";
+  if (q.prev) { ctx.setLineDash([4 * d, 4 * d]); ctx.strokeStyle = "rgba(127,152,171,0.5)"; ctx.beginPath(); ctx.moveTo(0, Y(q.prev)); ctx.lineTo(W, Y(q.prev)); ctx.stroke(); ctx.setLineDash([]); }
+  const grad = ctx.createLinearGradient(0, 0, 0, H); grad.addColorStop(0, `rgba(${col},0.35)`); grad.addColorStop(1, `rgba(${col},0)`);
+  ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(X(i), Y(p[1])) : ctx.moveTo(X(i), Y(p[1]))); ctx.lineTo(X(pts.length - 1), H); ctx.lineTo(X(0), H); ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+  ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(X(i), Y(p[1])) : ctx.moveTo(X(i), Y(p[1])));
+  ctx.strokeStyle = `rgb(${col})`; ctx.lineWidth = 1.6 * d; ctx.shadowBlur = 8 * d; ctx.shadowColor = `rgba(${col},0.9)`; ctx.stroke(); ctx.shadowBlur = 0;
+  const ex = X(pts.length - 1), ey = Y(pts[pts.length - 1][1]);
+  ctx.fillStyle = `rgb(${col})`; ctx.beginPath(); ctx.arc(ex, ey, 3 * d, 0, Math.PI * 2); ctx.fill();
+}
+function renderMarkets() {
+  const box = $("mktGrid"); box.textContent = "";
+  const list = stockList();
+  if (!list.length) { box.append(mkEl("div", "empty", "Add stocks in Settings → Stocks to follow.")); return; }
+  for (const sym of list) {
+    const q = markets.data[sym], card = mkEl("div", "mkt");
+    const head = mkEl("div", "mkt-head");
+    head.append(mkEl("b", "", sym));
+    if (q) {
+      const up = (q.change || 0) >= 0;
+      head.append(mkEl("span", "mkt-price", (q.currency === "USD" ? "$" : "") + Number(q.price).toFixed(2)), mkEl("span", "mkt-chg " + (up ? "up" : "down"), `${up ? "▲" : "▼"} ${Math.abs(q.change || 0).toFixed(2)}%`));
+    } else head.append(mkEl("span", "mkt-price", markets.failed.includes(sym) ? "unavailable" : "loading…"));
+    const cv = mkEl("canvas", "mkt-cv"); cv.setAttribute("aria-label", `${sym} price chart`);
+    card.append(head, cv);
+    if (q) card.append(mkEl("small", "", q.range === "1d" ? "Today, 5-min · dashed line = yesterday's close" : "Last 5 days (market closed)"));
+    box.append(card);
+    if (q) requestAnimationFrame(() => drawSpark(cv, q));
+  }
+}
+async function loadMarkets() {
+  const syms = stockList(); if (!syms.length) { renderMarkets(); return; }
+  try {
+    const r = await api("/api/stocks?symbols=" + encodeURIComponent(syms.join(",")));
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json();
+    for (const q of j.quotes || []) markets.data[q.symbol] = q;
+    markets.failed = j.failed || []; markets.at = Date.now();
+    $("mktTime").textContent = "Updated " + new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    $("mktTime").textContent = "Needs jarvis_server.py";
+  }
+  renderMarkets();
+}
+addEventListener("resize", () => { clearTimeout(markets.rt); markets.rt = setTimeout(renderMarkets, 200); });
+$("saveProfile").addEventListener("click", () => setTimeout(loadMarkets, 300));
+setTimeout(loadMarkets, 1500);
+setInterval(() => { if (!document.hidden) loadMarkets(); }, 60000);
 
 renderBrief();
 setTimeout(briefCheck, 3000);

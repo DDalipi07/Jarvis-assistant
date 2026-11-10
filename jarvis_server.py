@@ -175,6 +175,41 @@ def load_config_raw():
         return {}
 
 
+# ---------------- stock prices (Yahoo Finance's public chart feed, no key needed) ----------------
+_stock_cache = {}
+
+
+def fetch_stock(symbol):
+    import urllib.request
+    hit = _stock_cache.get(symbol)
+    if hit and time.time() - hit[0] < 55:
+        return hit[1]
+    out = None
+    for rng, iv in (("1d", "5m"), ("5d", "30m")):
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(symbol)}?range={rng}&interval={iv}&includePrePost=false"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Jarvis personal dashboard)"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        res = (data.get("chart") or {}).get("result") or []
+        if not res:
+            continue
+        res = res[0]
+        meta = res.get("meta", {})
+        closes = ((res.get("indicators") or {}).get("quote") or [{}])[0].get("close") or []
+        pts = [[t * 1000, round(c, 4)] for t, c in zip(res.get("timestamp") or [], closes) if c is not None]
+        if len(pts) < 2:
+            continue
+        prev = meta.get("chartPreviousClose") if rng == "1d" else pts[0][1]
+        price = meta.get("regularMarketPrice") or pts[-1][1]
+        out = {"symbol": symbol, "price": price, "prev": prev, "currency": meta.get("currency", "USD"),
+               "change": round((price - prev) / prev * 100, 2) if prev else None, "points": pts[-160:], "range": rng,
+               "time": (meta.get("regularMarketTime") or 0) * 1000}
+        break
+    if out:
+        _stock_cache[symbol] = (time.time(), out)
+    return out
+
+
 # ---------------- your folders (read-only browsing, open on this computer) ----------------
 FILE_TOKEN = secrets.token_urlsafe(24)  # changes every time the server starts; lets the page open previews
 BLOCK_OPEN = {".exe", ".bat", ".cmd", ".com", ".ps1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh", ".msi", ".msp",
@@ -414,6 +449,17 @@ class JarvisHandler(http.server.SimpleHTTPRequestHandler):
                     return self.send_json(401, {"ok": False, "error": "Gmail refused the login: " + str(e)})
                 except Exception as e:
                     return self.send_json(502, {"ok": False, "error": "Couldn't reach Gmail: " + str(e)})
+            if self.path.startswith("/api/stocks"):
+                syms = [x.strip().upper() for x in self.query().get("symbols", "").split(",") if x.strip()][:8]
+                syms = [x for x in syms if re.fullmatch(r"[A-Z0-9.^=-]{1,12}", x)]
+                out, errors = [], []
+                for sym in syms:
+                    try:
+                        q = fetch_stock(sym)
+                        out.append(q) if q else errors.append(sym)
+                    except Exception:
+                        errors.append(sym)
+                return self.send_json(200, {"ok": True, "quotes": out, "failed": errors})
             if self.path.startswith("/api/files/"):
                 return self.files_get()
             return self.send_json(404, {"ok": False})

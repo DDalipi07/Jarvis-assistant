@@ -18,6 +18,7 @@ Bring your own AI: it works with a **Claude (Anthropic)** or **OpenAI** API key,
 | 🎓 **School** | Reads Google Classroom and school emails from Gmail, lists deadlines and reminds you the evening before and on the day. |
 | 🎵 **Spotify** | Album cover pop-up for the current song; skip, pause or play by gesture or voice. |
 | 📝 **Workspace (Google Docs & Slides)** | Write in Google Docs and Slides right inside Jarvis, or ask Jarvis to write a section of your essay or build a whole slide deck (with speaker notes) from one sentence. |
+| 🌍 **Live dashboard** | A rotating holographic globe with continent labels and glowing network arcs, plus live charts for your stocks (Yahoo Finance, refreshed every minute). |
 | 📁 **Files** | Browse folders you choose (like your uni folder), search them, preview PDFs and images, and open files on your computer, or just ask Jarvis to find and open one. Read-only. |
 | 🔊 **Volume** | Change your computer's volume with a pinch gesture or by asking. |
 
