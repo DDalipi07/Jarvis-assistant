@@ -98,7 +98,7 @@ Jarvis only asks for access to Docs, Slides and the Drive files it creates or op
 ### Desktop app (Instagram live inside Jarvis)
 Instagram blocks being shown inside web pages, so in Chrome it opens in a side window. To have it **live inside the Instagram panel**, run Jarvis as a desktop app:
 1. Install [Node.js](https://nodejs.org) (the LTS version).
-2. In the jarvis folder, run `npm install` once.
+2. In the jarvis folder, run `npm install` once. If npm says Electron's install script was blocked, run `npm install-scripts approve electron` and then `npm install` again.
 3. Start Jarvis with `npm start`. It starts the server for you.
 
 In the app, voice input (🎤) is off because it relies on Chrome's speech service. Everything else works.
