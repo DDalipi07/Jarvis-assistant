@@ -159,6 +159,23 @@ form.ask input{flex:1}
 .setup b{color:var(--text);font-weight:500}
 .lbl{font:11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:4px}
 .toast.school{border-color:var(--amber)} .toast.school .eyebrow{color:var(--amber)}
+.crumbs{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:10px 14px 6px;font:12px var(--f-mono);color:var(--muted)}
+.crumbs button{background:none;border:0;color:var(--cyan);font:inherit;cursor:pointer;padding:2px 4px;border-radius:3px}
+.crumbs button:hover{background:var(--panel-2)}
+.flist{max-height:340px;overflow-y:auto;border-top:1px solid var(--line)}
+.frow{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:10px;align-items:center;padding:7px 14px;border-top:1px solid rgba(28,50,70,.6);cursor:pointer}
+.frow:first-child{border-top:0}
+.frow:hover,.frow:focus-visible{background:var(--panel-2);outline:none}
+.ftype{font:10px var(--f-mono);letter-spacing:.08em;text-align:center;padding:3px 0;border:1px solid var(--line-hi);border-radius:3px;color:var(--muted)}
+.ftype.dir{color:var(--amber);border-color:rgba(255,181,71,.45)}
+.ftype.pdf{color:var(--red);border-color:rgba(255,107,107,.45)}
+.ftype.doc{color:var(--cyan);border-color:rgba(79,214,255,.45)}
+.ftype.img{color:var(--green);border-color:rgba(91,227,166,.45)}
+.fname{min-width:0;overflow-wrap:anywhere;font-size:14px}
+.fname small{display:block;font:11px var(--f-mono);color:var(--muted)}
+.facts{display:flex;gap:6px}
+.facts a,.facts button{font:11px var(--f-mono);color:var(--cyan);background:none;border:1px solid var(--line-hi);border-radius:3px;padding:3px 7px;cursor:pointer;text-decoration:none}
+.facts a:hover,.facts button:hover{border-color:var(--cyan)}
 .tog{display:flex;align-items:center;gap:6px;font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;color:var(--muted);text-transform:none;cursor:pointer}
 </style>
 </head>
@@ -248,6 +265,23 @@ form.ask input{flex:1}
       <section class="panel" id="briefPanel">
         <div class="ph"><span id="briefTitle">Briefing</span><span style="display:flex;gap:10px;align-items:center"><em id="briefTime">7:30 and 18:30</em><button class="linkbtn" id="briefNow" type="button">Refresh</button></span></div>
         <div id="briefBody"><div class="empty">Your briefing on NVDA, AAPL, TSLA, the S&amp;P 500 and the news arrives automatically at 7:30 and 18:30 while Jarvis is open. If you open Jarvis later, it catches up right away.</div></div>
+      </section>
+
+      <section class="panel" id="filesPanel">
+        <div class="ph"><span>Files</span><span style="display:flex;gap:10px;align-items:center;min-width:0"><select id="rootPick" hidden aria-label="Folder" style="padding:3px 6px;max-width:150px"></select><button class="linkbtn" id="addFolderBtn" type="button">Add folder</button></span></div>
+        <div class="setup" id="folderSetup" hidden>
+          <p>Choose a folder Jarvis can show you, like <b>YEAR 2</b>. Jarvis can only look inside folders you add here, and never changes or deletes anything.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><input type="text" id="folderName" placeholder="Folder name (YEAR 2) or full path" aria-label="Folder name or path" autocomplete="off" style="flex:1;min-width:0"><button class="btn" id="folderFind" type="button">Find</button></div>
+          <div id="folderFound" style="display:flex;flex-direction:column;gap:6px"></div>
+          <p id="folderErr" style="color:var(--red)"></p>
+        </div>
+        <div id="filesBrowser" hidden>
+          <div class="crumbs" id="crumbs"></div>
+          <div style="padding:0 14px 10px"><input type="text" id="fileSearch" placeholder="Search this folder…" aria-label="Search files" autocomplete="off" style="width:100%"></div>
+          <div class="flist" id="fileList"></div>
+          <div style="padding:8px 14px 12px"><button class="linkbtn" id="removeFolder" type="button">Stop sharing this folder with Jarvis</button></div>
+        </div>
+        <div class="empty" id="filesMsg" hidden></div>
       </section>
 
       <section class="panel">
@@ -927,7 +961,7 @@ function nowLine() {
 function systemPrompt() {
   return `You are JARVIS, the user's personal assistant: calm, quick, polite, a little dry and witty, like a refined British butler.${prefs.name ? " The user's name is " + prefs.name + "." : ""}${prefs.city ? " The user lives in " + prefs.city + "." : ""}
 Current local time: ${nowLine()}.
-You can: set alarms, reminders and timers (add_item, list_items, remove_item), control Spotify (spotify_control, now_playing), change the computer volume (set_volume), check school assignments and deadlines (get_school_tasks), and search the web for news, stock prices, weather and facts (web_search).
+You can: set alarms, reminders and timers (add_item, list_items, remove_item), control Spotify (spotify_control, now_playing), change the computer volume (set_volume), check school assignments and deadlines (get_school_tasks), find and open files in the user's shared folders (find_files, open_file), and search the web for news, stock prices, weather and facts (web_search).
 Rules:
 - Replies are spoken aloud: 1-4 short sentences, plain text, no markdown, no lists, no URLs.
 - Resolve relative times ("in 10 minutes", "tomorrow at 7") from the current local time. If an alarm has no time, ask one short question.
@@ -943,6 +977,8 @@ const TOOLS = [
   { name: "spotify_control", description: "Control the user's Spotify playback.", schema: obj({ action: { type: "string", enum: ["next", "pause", "play"] } }, ["action"]) },
   { name: "now_playing", description: "Get the song currently playing on Spotify.", schema: obj() },
   { name: "get_school_tasks", description: "Get the user's upcoming school assignments and deadlines (from Google Classroom and school email): course, title, due date.", schema: obj() },
+  { name: "find_files", description: "Search the user's shared folders (for example YEAR 2) for files or folders whose name or path contains the words. Returns folder index, relative path and name.", schema: obj({ query: { type: "string" } }, ["query"]) },
+  { name: "open_file", description: "Open a file or folder from find_files on the user's computer with its normal app (Word, PDF reader, Explorer).", schema: obj({ root: { type: "integer" }, path: { type: "string" } }, ["root", "path"]) },
   { name: "set_volume", description: "Change the computer's system volume. Each step is about 2%. Use mute to toggle mute.", schema: obj({ action: { type: "string", enum: ["up", "down", "mute"] }, steps: { type: "integer", description: "1-25, default 5" } }, ["action"]) }
 ].map(t => ({ ...t, run: inp => runTool(t.name, inp) }));
 async function runTool(name, inp) {
@@ -968,6 +1004,18 @@ async function runTool(name, inp) {
   if (name === "get_school_tasks") {
     if (!schoolReady) return { error: "School emails aren't connected yet." };
     return upcomingSchool().map(t => ({ course: t.course, title: t.title, due: typeof t.due === "number" ? localISO(t.due) : (t.dueText || "no due date"), detail: t.detail }));
+  }
+  if (name === "find_files") {
+    if (!files.roots.length) return { error: "No folders are shared with Jarvis yet. The user can add one in the Files panel." };
+    const out = [];
+    for (const r of files.roots) {
+      try { const res = await api(`/api/files/search?root=${r.index}&q=${encodeURIComponent(String(inp.query || ""))}`); const j = await res.json(); for (const e of (j.items || []).slice(0, 15)) out.push({ root: r.index, folder: r.name, path: e.path, name: e.name, isFolder: e.dir }); } catch {}
+    }
+    return out.length ? out : { found: 0 };
+  }
+  if (name === "open_file") {
+    const ok = await openOnComputer(Number(inp.root) || 0, String(inp.path || ""), String(inp.path || "").split("/").pop());
+    return ok ? { ok: true } : { error: "Couldn't open that file." };
   }
   if (name === "set_volume") {
     const action = ["up", "down", "mute"].includes(inp.action) ? inp.action : "up";
@@ -1380,6 +1428,116 @@ $("gSave").addEventListener("click", async () => {
 $("schoolNow").addEventListener("click", () => { armAudio(); runSchool(); });
 setInterval(() => { renderSchool(); if (schoolReady && apiKey && Date.now() - (school.lastRun || 0) > SCHOOL_EVERY) runSchool(); }, 60000);
 setTimeout(initSchool, 1500);
+
+/* ---------- files: browse folders you choose (read-only), open them on this computer ---------- */
+const files = { roots: [], root: 0, path: "", token: "", searchT: null };
+const PREVIEW = /\.(pdf|png|jpe?g|gif|webp|bmp|txt|md|csv|json|mp3|wav|m4a|ogg|mp4|webm|mov)$/i;
+function fileKind(e) {
+  if (e.dir) return ["DIR", "dir"];
+  const ext = (e.name.split(".").pop() || "").toLowerCase();
+  if (ext === "pdf") return ["PDF", "pdf"];
+  if (/^(docx?|odt|rtf|txt|md|pptx?|key|xlsx?|csv|pages)$/.test(ext)) return [ext.slice(0, 4).toUpperCase(), "doc"];
+  if (/^(png|jpe?g|gif|webp|bmp|heic|svg|psd|ai|dwg|skp|3dm|rvt)$/.test(ext)) return [ext.slice(0, 4).toUpperCase(), "img"];
+  return [(ext || "FILE").slice(0, 4).toUpperCase(), ""];
+}
+const fsize = n => n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(0) + " KB" : (n / 1048576).toFixed(1) + " MB";
+const rawUrl = (root, path) => `/files/raw?root=${root}&path=${encodeURIComponent(path)}&t=${encodeURIComponent(files.token)}`;
+async function openOnComputer(root, path, name) {
+  try {
+    const r = await api("/api/files/open", { method: "POST", body: JSON.stringify({ root, path }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
+    log("Opened " + (name || path || "folder"), "FILES"); return true;
+  } catch (e) { log("Couldn't open it: " + e.message, "FILES"); return false; }
+}
+function fileRow(e, showPath) {
+  const row = mkEl("div", "frow"); row.tabIndex = 0; row.setAttribute("role", "button");
+  const [label, cls] = fileKind(e);
+  const nm = mkEl("div", "fname", e.name);
+  nm.append(mkEl("small", "", showPath ? e.path : e.dir ? "Folder" : `${fsize(e.size)} · ${new Date(e.modified).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`));
+  const acts = mkEl("div", "facts");
+  if (!e.dir && PREVIEW.test(e.name)) { const v = mkEl("a", "", "View"); v.href = rawUrl(files.root, e.path); v.target = "_blank"; v.rel = "noopener"; v.onclick = ev => ev.stopPropagation(); acts.append(v); }
+  const o = mkEl("button", "", "Open"); o.type = "button"; o.title = "Open on this computer"; o.onclick = ev => { ev.stopPropagation(); openOnComputer(files.root, e.path, e.name); };
+  acts.append(o);
+  row.append(mkEl("span", "ftype " + cls, label), nm, acts);
+  const go = () => e.dir ? listFolder(e.path) : (PREVIEW.test(e.name) ? window.open(rawUrl(files.root, e.path), "_blank", "noopener") : openOnComputer(files.root, e.path, e.name));
+  row.onclick = go; row.onkeydown = ev => { if (ev.key === "Enter") go(); };
+  return row;
+}
+function renderCrumbs() {
+  const c = $("crumbs"); c.textContent = "";
+  const root = files.roots[files.root]; if (!root) return;
+  const parts = files.path ? files.path.split("/") : [];
+  const b = mkEl("button", "", root.name); b.type = "button"; b.onclick = () => listFolder(""); c.append(b);
+  parts.forEach((p, i) => { c.append(mkEl("span", "", "/")); const x = mkEl("button", "", p); x.type = "button"; x.onclick = () => listFolder(parts.slice(0, i + 1).join("/")); c.append(x); });
+}
+async function listFolder(path) {
+  files.path = path || ""; $("fileSearch").value = ""; renderCrumbs();
+  const list = $("fileList"); list.textContent = ""; list.append(mkEl("div", "empty", "Loading…"));
+  try {
+    const r = await api(`/api/files/list?root=${files.root}&path=${encodeURIComponent(files.path)}`); const j = await r.json();
+    if (!r.ok) throw new Error(j.error || "HTTP " + r.status);
+    list.textContent = "";
+    if (!j.items.length) list.append(mkEl("div", "empty", "This folder is empty."));
+    j.items.forEach(e => list.append(fileRow(e, false)));
+  } catch (e) { list.textContent = ""; list.append(mkEl("div", "empty", "Couldn't open this folder: " + e.message)); }
+}
+async function searchFiles(q) {
+  if (!q.trim()) return listFolder(files.path);
+  const list = $("fileList");
+  try {
+    const r = await api(`/api/files/search?root=${files.root}&q=${encodeURIComponent(q)}`); const j = await r.json();
+    list.textContent = "";
+    if (!j.items || !j.items.length) { list.append(mkEl("div", "empty", "No files match.")); return; }
+    j.items.forEach(e => list.append(fileRow(e, true)));
+  } catch { }
+}
+function showFiles() {
+  const has = files.roots.length > 0;
+  $("filesBrowser").hidden = !has; $("rootPick").hidden = files.roots.length < 2; $("folderSetup").hidden = has; $("filesMsg").hidden = true;
+  $("addFolderBtn").textContent = has ? "Add folder" : "";
+  const sel = $("rootPick"); sel.textContent = "";
+  files.roots.forEach(r => { const o = mkEl("option", "", r.name); o.value = r.index; sel.append(o); });
+  if (has) { files.root = Math.min(files.root, files.roots.length - 1); sel.value = files.root; listFolder(""); }
+}
+async function filesInit() {
+  try {
+    const r = await api("/api/files/roots"); if (!r.ok) throw 0; const j = await r.json();
+    files.roots = j.roots; files.token = j.token;
+  } catch { $("filesMsg").hidden = false; $("filesMsg").textContent = "Start Jarvis with python jarvis_server.py to browse your files."; return; }
+  showFiles();
+}
+async function addFolder(path) {
+  $("folderErr").textContent = "";
+  const r = await api("/api/files/add", { method: "POST", body: JSON.stringify({ path }) }); const j = await r.json().catch(() => ({}));
+  if (!r.ok) { $("folderErr").textContent = j.error || "Couldn't add that folder."; return false; }
+  $("folderName").value = ""; $("folderFound").textContent = "";
+  await filesInit(); files.root = files.roots.length - 1; showFiles();
+  log("Folder added: " + path.split(/[\\/]/).pop(), "FILES"); return true;
+}
+$("folderFind").addEventListener("click", async () => {
+  const v = $("folderName").value.trim(); $("folderErr").textContent = ""; $("folderFound").textContent = "";
+  if (!v) { $("folderErr").textContent = "Type the folder's name, for example YEAR 2."; return; }
+  if (/[\\/]/.test(v)) { addFolder(v); return; }
+  $("folderFind").disabled = true; $("folderFind").textContent = "Searching…";
+  try {
+    const r = await api("/api/files/find?name=" + encodeURIComponent(v)); const j = await r.json();
+    if (!j.found || !j.found.length) { $("folderErr").textContent = `Couldn't find a folder called "${v}" on your Desktop, Documents, Downloads or OneDrive. Paste its full path instead (right-click the folder → Copy as path).`; return; }
+    $("folderFound").append(mkEl("p", "", j.found.length === 1 ? "Found it:" : "Which one?"));
+    for (const f of j.found) { const b = mkEl("button", "btn ghost", f); b.type = "button"; b.style.textAlign = "left"; b.style.whiteSpace = "normal"; b.onclick = () => addFolder(f); $("folderFound").append(b); }
+  } catch { $("folderErr").textContent = "Jarvis server isn't running."; }
+  finally { $("folderFind").disabled = false; $("folderFind").textContent = "Find"; }
+});
+$("folderName").addEventListener("keydown", e => { if (e.key === "Enter") $("folderFind").click(); });
+$("addFolderBtn").addEventListener("click", () => { $("folderSetup").hidden = !$("folderSetup").hidden; if (!$("folderSetup").hidden) $("folderName").focus(); });
+$("rootPick").addEventListener("change", e => { files.root = Number(e.target.value); listFolder(""); });
+$("fileSearch").addEventListener("input", e => { clearTimeout(files.searchT); files.searchT = setTimeout(() => searchFiles(e.target.value), 300); });
+$("removeFolder").addEventListener("click", async () => {
+  const root = files.roots[files.root]; if (!root) return;
+  await api("/api/files/remove", { method: "POST", body: JSON.stringify({ root: files.root }) });
+  log("Stopped sharing " + root.name, "FILES"); files.root = 0; filesInit();
+});
+setTimeout(filesInit, 1200);
 
 renderBrief();
 setTimeout(briefCheck, 3000);

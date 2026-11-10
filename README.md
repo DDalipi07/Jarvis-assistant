@@ -17,6 +17,7 @@ Bring your own AI: it works with a **Claude (Anthropic)** or **OpenAI** API key,
 | ⏰ **Alarms, reminders, timers** | Set them by typing, talking or gesturing. Wake up to beeps, your own audio file, or any Spotify song. |
 | 🎓 **School** | Reads Google Classroom and school emails from Gmail, lists deadlines and reminds you the evening before and on the day. |
 | 🎵 **Spotify** | Album cover pop-up for the current song; skip, pause or play by gesture or voice. |
+| 📁 **Files** | Browse folders you choose (like your uni folder), search them, preview PDFs and images, and open files on your computer, or just ask Jarvis to find and open one. Read-only. |
 | 🔊 **Volume** | Change your computer's volume with a pinch gesture or by asking. |
 
 ## Requirements
@@ -90,6 +91,7 @@ On Windows, open **Settings → Time & language → Speech → Add voices** and 
 - **Your API keys, Spotify login and preferences** are stored only in your browser on your computer (`localStorage`). They're sent only to the provider they belong to.
 - **Your Gmail app password** is encrypted before it's saved: Windows encrypts it so only your Windows account can unlock it, and on macOS it goes into the Keychain. The settings file (`jarvis_config.json`) is listed in `.gitignore`, so it's never committed, and the server refuses to serve it to any web page.
 - **The server only listens on `127.0.0.1`**, so other devices on your network can't reach it. It rejects requests from other websites (including DNS-rebinding tricks) and sends a strict security policy so the page can only talk to Anthropic, OpenAI, Spotify and the hand-tracking library.
+- **Files:** Jarvis can only see folders you add in the Files panel, never changes or deletes anything, and won't run programs or scripts (they're only shown in Explorer). Previews need a secret that changes every time the server starts, so other websites can't read your files.
 - **Camera video** is processed in your browser and never uploaded.
 - Calling AI APIs straight from the browser is fine for a personal app on your own computer. **Don't host this page on a public website with your key in it.**
 

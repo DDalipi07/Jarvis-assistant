@@ -14,8 +14,12 @@ import email.utils
 import http.server
 import imaplib
 import json
+import mimetypes
 import os
 import re
+import secrets
+import time
+import urllib.parse
 import socketserver
 import subprocess
 import sys
@@ -140,12 +144,7 @@ def load_config():
     return cfg
 
 
-def save_config(address, app_password, school_address):
-    try:
-        stored = protect_secret(app_password, address)
-    except Exception:
-        stored = {"app_password": app_password}
-    cfg = {"address": address, "school_address": school_address, **stored}
+def write_config(cfg):
     tmp = CONFIG + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(cfg, f)
@@ -154,6 +153,133 @@ def save_config(address, app_password, school_address):
     except Exception:
         pass
     os.replace(tmp, CONFIG)
+
+
+def save_config(address, app_password, school_address):
+    try:
+        stored = protect_secret(app_password, address)
+    except Exception:
+        stored = {"app_password": app_password}
+    cfg = {k: v for k, v in load_config_raw().items() if not k.startswith("app_password")}
+    cfg.update({"address": address, "school_address": school_address, **stored})
+    write_config(cfg)
+
+
+def load_config_raw():
+    try:
+        with open(CONFIG, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+# ---------------- your folders (read-only browsing, open on this computer) ----------------
+FILE_TOKEN = secrets.token_urlsafe(24)  # changes every time the server starts; lets the page open previews
+BLOCK_OPEN = {".exe", ".bat", ".cmd", ".com", ".ps1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh", ".msi", ".msp",
+              ".scr", ".lnk", ".reg", ".hta", ".jar", ".cpl", ".pif", ".url", ".sh", ".app", ".command", ".py", ".pyw"}
+ACTIVE_TYPES = {".html", ".htm", ".svg", ".xml", ".xhtml", ".js", ".mjs", ".css"}  # shown as plain text, never run
+SKIP_NAMES = {"desktop.ini", "thumbs.db", ".ds_store"}
+
+
+def folder_roots():
+    return [r for r in load_config_raw().get("folders", []) if os.path.isdir(r)]
+
+
+def resolve_inside(root_index, rel):
+    """Turn (root, relative path) into a real path, refusing anything outside the shared folder."""
+    roots = folder_roots()
+    if not (0 <= root_index < len(roots)):
+        raise PermissionError("unknown folder")
+    root = os.path.realpath(roots[root_index])
+    full = os.path.realpath(os.path.join(root, *[p for p in str(rel).replace("\\", "/").split("/") if p not in ("", ".")]))
+    if os.path.commonpath([root, full]) != root:
+        raise PermissionError("outside the shared folder")
+    return root, full
+
+
+def entry_info(root, full):
+    st = os.stat(full)
+    rel = os.path.relpath(full, root).replace("\\", "/")
+    return {"name": os.path.basename(full), "path": "" if rel == "." else rel, "dir": os.path.isdir(full),
+            "size": st.st_size, "modified": int(st.st_mtime * 1000)}
+
+
+def list_folder(root_index, rel):
+    root, full = resolve_inside(root_index, rel)
+    out = []
+    with os.scandir(full) as it:
+        for e in it:
+            if e.name.lower() in SKIP_NAMES or e.name.startswith(("~$", ".")):
+                continue
+            try:
+                out.append(entry_info(root, e.path))
+            except OSError:
+                pass
+    out.sort(key=lambda x: (not x["dir"], x["name"].lower()))
+    return out[:500]
+
+
+def search_folder(root_index, query, limit=40):
+    root, _ = resolve_inside(root_index, "")
+    words = [w for w in query.lower().split() if w]
+    hits, started = [], time.time()
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+        for name in dirnames + filenames:
+            if name.lower() in SKIP_NAMES or name.startswith("~$"):
+                continue
+            rel = os.path.relpath(os.path.join(dirpath, name), root).lower()
+            if all(w in rel for w in words):
+                try:
+                    hits.append(entry_info(root, os.path.join(dirpath, name)))
+                except OSError:
+                    pass
+                if len(hits) >= limit:
+                    return hits
+        if time.time() - started > 4:
+            break
+    return hits
+
+
+def find_named_folders(name):
+    """Look for a folder with this name in the usual places (Desktop, Documents, Downloads, OneDrive)."""
+    home = os.path.expanduser("~")
+    bases = [home] + [os.path.join(home, d) for d in ("Desktop", "Documents", "Downloads", "Pictures")]
+    for od in [os.path.join(home, d) for d in os.listdir(home) if d.lower().startswith("onedrive")] if os.path.isdir(home) else []:
+        bases += [od] + [os.path.join(od, d) for d in ("Desktop", "Documents", "Dokumente", "Dokumentet")]
+    target, found, seen = name.strip().lower(), [], set()
+    for base in bases:
+        if not os.path.isdir(base):
+            continue
+        for dirpath, dirnames, _ in os.walk(base):
+            depth = dirpath[len(base):].count(os.sep)
+            dirnames[:] = [d for d in dirnames if not d.startswith((".", "$")) and d.lower() not in ("appdata", "node_modules")]
+            for d in dirnames:
+                if d.lower() == target:
+                    real = os.path.realpath(os.path.join(dirpath, d))
+                    if real not in seen:
+                        seen.add(real); found.append(real)
+            if depth >= 2:
+                dirnames[:] = []
+            if len(found) >= 10:
+                return found
+    return found
+
+
+def open_on_computer(full):
+    """Open a file with its normal app (Word, PDF reader...). Programs and scripts are only shown in the folder."""
+    ext = os.path.splitext(full)[1].lower()
+    if sys.platform == "win32":
+        if os.path.isdir(full):
+            os.startfile(full)
+        elif ext in BLOCK_OPEN:
+            subprocess.Popen(["explorer", "/select,", full])
+        else:
+            os.startfile(full)
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", full] if ext in BLOCK_OPEN else ["open", full])
+    else:
+        subprocess.Popen(["xdg-open", os.path.dirname(full) if ext in BLOCK_OPEN else full])
 
 
 def gmail_login(address, app_password):
@@ -286,12 +412,76 @@ class JarvisHandler(http.server.SimpleHTTPRequestHandler):
                     return self.send_json(401, {"ok": False, "error": "Gmail refused the login: " + str(e)})
                 except Exception as e:
                     return self.send_json(502, {"ok": False, "error": "Couldn't reach Gmail: " + str(e)})
+            if self.path.startswith("/api/files/"):
+                return self.files_get()
             return self.send_json(404, {"ok": False})
+        if self.path.startswith("/files/raw?"):
+            return self.files_raw()
         if not self.host_ok():
             return self.send_error(403)
         if not self.path.split("?")[0].endswith((".html", "/")) or "config" in self.path.lower():
             return self.send_error(404)  # never serve the config file or the Python code
         return super().do_GET()
+
+    # ----- folders -----
+    def query(self):
+        return {k: v[0] for k, v in urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).items()}
+
+    def files_get(self):
+        q, route = self.query(), urllib.parse.urlsplit(self.path).path
+        try:
+            if route == "/api/files/roots":
+                return self.send_json(200, {"ok": True, "token": FILE_TOKEN,
+                                            "roots": [{"index": i, "name": os.path.basename(r) or r, "path": r} for i, r in enumerate(folder_roots())]})
+            if route == "/api/files/find":
+                return self.send_json(200, {"ok": True, "found": find_named_folders(q.get("name", ""))[:10]})
+            if route == "/api/files/list":
+                return self.send_json(200, {"ok": True, "items": list_folder(int(q.get("root", 0)), q.get("path", ""))})
+            if route == "/api/files/search":
+                return self.send_json(200, {"ok": True, "items": search_folder(int(q.get("root", 0)), q.get("q", ""))})
+        except PermissionError as e:
+            return self.send_json(403, {"ok": False, "error": str(e)})
+        except FileNotFoundError:
+            return self.send_json(404, {"ok": False, "error": "That file or folder no longer exists."})
+        except Exception as e:
+            return self.send_json(500, {"ok": False, "error": str(e)})
+        return self.send_json(404, {"ok": False})
+
+    def files_raw(self):
+        """Preview a file in the browser. Needs the secret token, so other websites can't read your files."""
+        q = self.query()
+        if not self.host_ok() or not secrets.compare_digest(q.get("t", ""), FILE_TOKEN):
+            return self.send_error(403)
+        try:
+            _, full = resolve_inside(int(q.get("root", 0)), q.get("path", ""))
+        except Exception:
+            return self.send_error(404)
+        if not os.path.isfile(full):
+            return self.send_error(404)
+        ext = os.path.splitext(full)[1].lower()
+        ctype = "text/plain; charset=utf-8" if ext in ACTIVE_TYPES else (mimetypes.guess_type(full)[0] or "application/octet-stream")
+        size = os.path.getsize(full)
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(size))
+        name = urllib.parse.quote(os.path.basename(full))
+        self.send_header("Content-Disposition", f"inline; filename*=UTF-8''{name}")
+        self.send_header("Cache-Control", "no-store")
+        if not ctype.startswith(("application/pdf", "image/", "audio/", "video/")):
+            self.send_header("Content-Security-Policy", "sandbox; default-src 'none'; style-src 'unsafe-inline'")
+        self.end_headers()
+        with open(full, "rb") as f:
+            while True:
+                chunk = f.read(1 << 16)
+                if not chunk:
+                    break
+                try:
+                    self.wfile.write(chunk)
+                except (BrokenPipeError, ConnectionResetError):
+                    break
+
+    def do_HEAD(self):
+        return self.send_error(405)  # only GET and POST are used; keeps every check in one place
 
     def list_directory(self, path):
         return self.send_error(404)  # no folder listings
@@ -330,13 +520,46 @@ class JarvisHandler(http.server.SimpleHTTPRequestHandler):
             save_config(address, app_password, school_address)
             return self.send_json(200, {"ok": True})
 
+        if self.path == "/api/files/add":
+            path = os.path.realpath(os.path.expanduser(str(data.get("path", "")).strip().strip('"')))
+            if not os.path.isdir(path):
+                return self.send_json(404, {"ok": False, "error": "Couldn't find that folder on this computer."})
+            home = os.path.realpath(os.path.expanduser("~"))
+            if path in (home, os.path.realpath(os.sep), os.path.realpath(os.path.splitdrive(home)[0] + os.sep)):
+                return self.send_json(400, {"ok": False, "error": "Pick a specific folder, not your whole drive or home folder."})
+            cfg = load_config_raw()
+            folders = [f for f in cfg.get("folders", []) if f != path] + [path]
+            cfg["folders"] = folders[-8:]
+            write_config(cfg)
+            return self.send_json(200, {"ok": True})
+
+        if self.path == "/api/files/remove":
+            cfg = load_config_raw()
+            roots = cfg.get("folders", [])
+            i = int(data.get("root", -1))
+            if 0 <= i < len(roots):
+                roots.pop(i)
+            cfg["folders"] = roots
+            write_config(cfg)
+            return self.send_json(200, {"ok": True})
+
+        if self.path == "/api/files/open":
+            try:
+                _, full = resolve_inside(int(data.get("root", 0)), data.get("path", ""))
+                if not os.path.exists(full):
+                    return self.send_json(404, {"ok": False, "error": "That file no longer exists."})
+                open_on_computer(full)
+                return self.send_json(200, {"ok": True})
+            except PermissionError as e:
+                return self.send_json(403, {"ok": False, "error": str(e)})
+            except Exception as e:
+                return self.send_json(500, {"ok": False, "error": str(e)})
+
         if self.path == "/api/school/forget":
             if sys.platform == "darwin":
                 subprocess.run(["security", "delete-generic-password", "-s", KEYCHAIN_SERVICE], capture_output=True)
-            try:
-                os.remove(CONFIG)
-            except FileNotFoundError:
-                pass
+            cfg = {k: v for k, v in load_config_raw().items() if not k.startswith("app_password") and k not in ("address", "school_address")}
+            write_config(cfg)
             return self.send_json(200, {"ok": True})
 
         return self.send_json(404, {"ok": False})
