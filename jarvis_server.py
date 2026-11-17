@@ -18,6 +18,7 @@ import mimetypes
 import os
 import re
 import secrets
+import threading
 import time
 import urllib.parse
 import socket
@@ -174,6 +175,160 @@ def load_config_raw():
             return json.load(f)
     except Exception:
         return {}
+
+
+# ---------------- secrets kept encrypted on this computer ----------------
+def seal(name, value):
+    """Encrypt a secret so only your Windows account (or your Mac's Keychain) can read it."""
+    if sys.platform == "win32":
+        import base64
+        return {name + "_dpapi": base64.b64encode(_dpapi(value.encode(), True)).decode()}
+    if sys.platform == "darwin":
+        r = subprocess.run(["security", "add-generic-password", "-U", "-a", "jarvis", "-s", "jarvis-" + name, "-w", value],
+                           capture_output=True)
+        if r.returncode == 0:
+            return {name + "_keychain": True}
+    return {name: value}
+
+
+def unseal(cfg, name):
+    try:
+        if cfg.get(name + "_dpapi"):
+            import base64
+            return _dpapi(base64.b64decode(cfg[name + "_dpapi"]), False).decode()
+        if cfg.get(name + "_keychain"):
+            r = subprocess.run(["security", "find-generic-password", "-a", "jarvis", "-s", "jarvis-" + name, "-w"],
+                               capture_output=True, text=True)
+            return r.stdout.strip() if r.returncode == 0 else ""
+    except Exception:
+        return ""
+    return cfg.get(name, "")
+
+
+def drop_sealed(cfg, name):
+    if cfg.get(name + "_keychain") and sys.platform == "darwin":
+        subprocess.run(["security", "delete-generic-password", "-a", "jarvis", "-s", "jarvis-" + name], capture_output=True)
+    for k in (name, name + "_dpapi", name + "_keychain"):
+        cfg.pop(k, None)
+
+
+# ---------------- Google sign-in that stays connected (Calendar sync, Docs, Slides) ----------------
+GOOGLE_REDIRECT = f"http://127.0.0.1:{PORT}/oauth/google"
+GOOGLE_SCOPES = " ".join([
+    "https://www.googleapis.com/auth/calendar.events",
+    "https://www.googleapis.com/auth/documents",
+    "https://www.googleapis.com/auth/presentations",
+    "https://www.googleapis.com/auth/drive.file",
+])
+_google = {"token": None, "exp": 0, "pending": None}
+_google_lock = threading.Lock()
+
+
+class GoogleError(Exception):
+    def __init__(self, msg, expired=False):
+        super().__init__(msg)
+        self.expired = expired
+
+
+def google_post(url, fields):
+    import urllib.request
+    import urllib.error
+    req = urllib.request.Request(url, data=urllib.parse.urlencode(fields).encode(),
+                                 headers={"Content-Type": "application/x-www-form-urlencoded"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return json.loads(r.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        try:
+            j = json.loads(e.read())
+        except Exception:
+            j = {}
+        err = j.get("error", "")
+        raise GoogleError(j.get("error_description") or err or f"Google said HTTP {e.code}", expired=err == "invalid_grant")
+
+
+def google_start(client_id, client_secret):
+    """Remember the app details for a moment and build the Google sign-in link."""
+    state = secrets.token_urlsafe(24)
+    _google["pending"] = {"state": state, "client_id": client_id, "secret": client_secret, "at": time.time()}
+    return "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode({
+        "client_id": client_id, "redirect_uri": GOOGLE_REDIRECT, "response_type": "code", "scope": GOOGLE_SCOPES,
+        "access_type": "offline", "prompt": "consent", "include_granted_scopes": "true", "state": state})
+
+
+def google_finish(state, code):
+    p = _google.get("pending")
+    if not p or not secrets.compare_digest(str(state), p["state"]) or time.time() - p["at"] > 900:
+        raise GoogleError("This sign-in link has expired. Click Connect in Jarvis again.")
+    _google["pending"] = None
+    j = google_post("https://oauth2.googleapis.com/token", {
+        "code": code, "client_id": p["client_id"], "client_secret": p["secret"],
+        "redirect_uri": GOOGLE_REDIRECT, "grant_type": "authorization_code"})
+    if not j.get("refresh_token"):
+        raise GoogleError("Google didn't give Jarvis a lasting sign-in. Click Connect again.")
+    cfg = load_config_raw()
+    drop_sealed(cfg, "google_secret"); drop_sealed(cfg, "google_refresh")
+    cfg["google_client_id"] = p["client_id"]
+    cfg.update(seal("google_secret", p["secret"]))
+    cfg.update(seal("google_refresh", j["refresh_token"]))
+    cfg.pop("google_expired", None)
+    write_config(cfg)
+    with _google_lock:
+        _google.update(token=j["access_token"], exp=time.time() + int(j.get("expires_in", 3600)) - 120)
+
+
+def google_status():
+    cfg = load_config_raw()
+    return {"connected": bool(cfg.get("google_client_id") and (cfg.get("google_refresh_dpapi") or cfg.get("google_refresh_keychain") or cfg.get("google_refresh"))),
+            "expired": bool(cfg.get("google_expired")), "client_id": cfg.get("google_client_id", "")}
+
+
+def google_token():
+    with _google_lock:
+        if _google["token"] and time.time() < _google["exp"]:
+            return _google["token"], int(_google["exp"] - time.time())
+        cfg = load_config_raw()
+        refresh, secret = unseal(cfg, "google_refresh"), unseal(cfg, "google_secret")
+        if not (refresh and secret and cfg.get("google_client_id")):
+            raise GoogleError("Google isn't connected.")
+        try:
+            j = google_post("https://oauth2.googleapis.com/token", {
+                "client_id": cfg["google_client_id"], "client_secret": secret,
+                "refresh_token": refresh, "grant_type": "refresh_token"})
+        except GoogleError as e:
+            if e.expired:
+                cfg["google_expired"] = True
+                write_config(cfg)
+            raise
+        _google.update(token=j["access_token"], exp=time.time() + int(j.get("expires_in", 3600)) - 120)
+        return _google["token"], int(_google["exp"] - time.time())
+
+
+def google_forget():
+    cfg = load_config_raw()
+    refresh = unseal(cfg, "google_refresh")
+    if refresh:
+        try:
+            google_post("https://oauth2.googleapis.com/revoke", {"token": refresh})
+        except Exception:
+            pass
+    drop_sealed(cfg, "google_secret"); drop_sealed(cfg, "google_refresh")
+    for k in ("google_client_id", "google_expired"):
+        cfg.pop(k, None)
+    write_config(cfg)
+    with _google_lock:
+        _google.update(token=None, exp=0)
+
+
+# ---------------- phone notifications (ntfy) ----------------
+def send_ntfy(server, topic, title, message, priority, tags):
+    import urllib.request
+    body = json.dumps({"topic": topic, "title": title[:200], "message": message[:3900] or title,
+                       "priority": priority, "tags": tags[:4]}).encode()
+    req = urllib.request.Request(server.rstrip("/") + "/", data=body,
+                                 headers={"Content-Type": "application/json", "User-Agent": "Jarvis"})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        return r.status == 200
 
 
 # ---------------- stock prices (Yahoo Finance's public chart feed, no key needed) ----------------
@@ -520,9 +675,21 @@ class JarvisHandler(http.server.SimpleHTTPRequestHandler):
                 return self.send_json(200, {"ok": True, "quotes": out, "failed": errors})
             if self.path.startswith("/api/files/"):
                 return self.files_get()
+            if self.path == "/api/google/status":
+                return self.send_json(200, {"ok": True, **google_status()})
+            if self.path == "/api/google/token":
+                try:
+                    tok, left = google_token()
+                    return self.send_json(200, {"ok": True, "token": tok, "expires_in": left})
+                except GoogleError as e:
+                    return self.send_json(401 if e.expired else 409, {"ok": False, "expired": e.expired, "error": str(e)})
+                except Exception as e:
+                    return self.send_json(502, {"ok": False, "error": "Couldn't reach Google: " + str(e)})
             return self.send_json(404, {"ok": False})
         if self.path.startswith("/files/raw?"):
             return self.files_raw()
+        if self.path.startswith("/oauth/google?"):
+            return self.google_callback()
         if not self.host_ok():
             return self.send_error(403)
         if not self.path.split("?")[0].endswith((".html", "/")) or "config" in self.path.lower():
@@ -586,6 +753,34 @@ class JarvisHandler(http.server.SimpleHTTPRequestHandler):
                 except (BrokenPipeError, ConnectionResetError):
                     break
 
+    def google_callback(self):
+        """Google sends you back here after you approve Jarvis. Saves the lasting sign-in, encrypted."""
+        if not self.host_ok():
+            return self.send_error(403)
+        q = self.query()
+        if q.get("error"):
+            ok, msg = False, "Google sign-in was cancelled."
+        else:
+            try:
+                google_finish(q.get("state", ""), q.get("code", ""))
+                ok, msg = True, "Google is connected. You can close this window."
+            except GoogleError as e:
+                ok, msg = False, str(e)
+            except Exception as e:
+                ok, msg = False, "Couldn't reach Google: " + str(e)
+        import html as _html
+        body = ("<!doctype html><meta charset=utf-8><title>Jarvis</title><body style='background:#060c13;color:#d6e6f1;"
+                "font:16px sans-serif;padding:40px'><h2>" + ("Connected" if ok else "Not connected") + "</h2><p>" + _html.escape(msg) +
+                "</p>" + ("<script>setTimeout(()=>window.close(),1200)</script>" if ok else "") + "</body>").encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_HEAD(self):
         return self.send_error(405)  # only GET and POST are used; keeps every check in one place
 
@@ -625,6 +820,32 @@ class JarvisHandler(http.server.SimpleHTTPRequestHandler):
                 return self.send_json(502, {"ok": False, "error": "Couldn't reach Gmail: " + str(e)})
             save_config(address, app_password, school_address)
             return self.send_json(200, {"ok": True})
+
+        if self.path == "/api/google/start":
+            client_id = str(data.get("client_id", "")).strip()
+            client_secret = str(data.get("client_secret", "")).strip()
+            if not client_id.endswith(".apps.googleusercontent.com") or len(client_secret) < 10:
+                return self.send_json(400, {"ok": False, "error": "Enter your Client ID and Client secret from Google Cloud."})
+            return self.send_json(200, {"ok": True, "url": google_start(client_id, client_secret)})
+
+        if self.path == "/api/google/forget":
+            google_forget()
+            return self.send_json(200, {"ok": True})
+
+        if self.path == "/api/ntfy":
+            topic = str(data.get("topic", ""))
+            if not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", topic):
+                return self.send_json(400, {"ok": False, "error": "bad topic"})
+            try:
+                pr = max(1, min(5, int(data.get("priority", 3))))
+            except Exception:
+                pr = 3
+            tags = [t for t in (data.get("tags") or []) if isinstance(t, str) and re.fullmatch(r"[a-z0-9_]{1,30}", t)]
+            try:
+                ok = send_ntfy("https://ntfy.sh", topic, str(data.get("title", "Jarvis")), str(data.get("message", "")), pr, tags)
+                return self.send_json(200 if ok else 502, {"ok": ok})
+            except Exception as e:
+                return self.send_json(502, {"ok": False, "error": "Couldn't reach ntfy: " + str(e)})
 
         if self.path == "/api/files/add":
             path = os.path.realpath(os.path.expanduser(str(data.get("path", "")).strip().strip('"')))

@@ -476,6 +476,39 @@ form.ask input{flex:1}
         </div>
       </section>
 
+      <section class="panel" id="phonePanel">
+        <div class="ph"><span>Phone</span><em id="phoneState">not linked</em></div>
+        <div class="setup">
+          <label class="lbl">Instant pop-ups (ntfy app)</label>
+          <label class="tog" style="font-size:12px"><input type="checkbox" id="ntfyOn"> Send alarms, reminders, new school tasks and the briefing to my phone</label>
+          <div id="ntfyBox" hidden style="display:flex;flex-direction:column;gap:8px">
+            <p>1. Install the free <b>ntfy</b> app (App Store or Google Play). 2. Tap <b>+</b> and subscribe to this topic (leave the server as ntfy.sh):</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><code id="ntfyTopic" style="font:13px var(--f-mono);background:var(--panel-2);border:1px solid var(--line);border-radius:4px;padding:6px 8px;overflow-wrap:anywhere;flex:1;min-width:0"></code><button class="btn ghost" id="ntfyCopy" type="button">Copy</button><button class="btn ghost" id="ntfyTest" type="button">Send test</button></div>
+            <p>Keep this topic secret like a password: anyone who knows it can read your pop-ups. <button class="linkbtn" id="ntfyNew" type="button">Make a new topic</button></p>
+          </div>
+          <p id="ntfyMsg"></p>
+          <label class="lbl">Google Calendar sync</label>
+          <p>Alarms and reminders go into your Google Calendar, so your phone alerts you even when the laptop is off. Events you add on your phone show up here.</p>
+          <div id="calSetup" style="display:flex;flex-direction:column;gap:8px">
+            <ol>
+              <li>In Google Cloud (the same project as Workspace), enable the <b>Google Calendar API</b>.</li>
+              <li>Open <b>Credentials</b>, click your OAuth client, and under <b>Authorized redirect URIs</b> add <b>http://127.0.0.1:8000/oauth/google</b>. Save.</li>
+              <li>On that same page, copy the <b>Client secret</b>.</li>
+              <li>In <b>OAuth consent screen → Audience</b>, click <b>Publish app</b>. If you skip this, Google signs Jarvis out every 7 days.</li>
+            </ol>
+            <input type="text" id="calClient" placeholder="Google Client ID" aria-label="Google Client ID" autocomplete="off">
+            <div style="display:flex;gap:8px;flex-wrap:wrap"><input type="password" id="calSecret" placeholder="Client secret" aria-label="Google Client secret" autocomplete="off" style="flex:1;min-width:0"><button class="btn" id="calConnect" type="button">Connect Google</button></div>
+            <p>The secret and your Google sign-in are encrypted on this computer and never shared.</p>
+          </div>
+          <div id="calOnRow" hidden style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+            <label class="tog" style="font-size:12px"><input type="checkbox" id="calOn"> Sync with my Google Calendar</label>
+            <button class="btn ghost" id="calNow" type="button">Sync now</button>
+            <button class="linkbtn" id="calDisconnect" type="button">Disconnect Google</button>
+          </div>
+          <p id="calMsg"></p>
+        </div>
+      </section>
+
     </div>
   </div>
 
@@ -582,7 +615,9 @@ function speak(text) {
 const LS = "jarvis-vision-items";
 let items = [];
 try { items = JSON.parse(localStorage.getItem(LS) || "[]").filter(i => typeof i.at === "number"); } catch { items = []; }
-const save = () => { try { localStorage.setItem(LS, JSON.stringify(items)); } catch {} };
+let calQuiet = false, calTimer = null;
+const save = () => { try { localStorage.setItem(LS, JSON.stringify(items)); } catch {} if (!calQuiet) { clearTimeout(calTimer); calTimer = setTimeout(() => { if (typeof calSync === "function") calSync(); }, 2500); } };
+function forgetItem(i) { if (i && i.gid) { try { const g = JSON.parse(localStorage.getItem("jarvis-cal-gone") || "[]"); g.push(i.gid); localStorage.setItem("jarvis-cal-gone", JSON.stringify(g.slice(-200))); } catch {} } }
 function addItem(kind, title, at) { items.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), kind, title, at, fired: false }); save(); render(); }
 function upcoming() { const now = Date.now(); return items.filter(i => !i.fired && i.at >= now - 1000).sort((a, b) => a.at - b.at); }
 function whenWords(at) {
@@ -605,7 +640,7 @@ function render() {
     const k = document.createElement("span"); k.className = "k " + i.kind; k.textContent = i.kind;
     t.append(k, document.createTextNode(i.title));
     const x = document.createElement("button"); x.className = "x"; x.type = "button"; x.textContent = "×"; x.setAttribute("aria-label", "Delete " + i.title);
-    x.onclick = () => { items = items.filter(j => j.id !== i.id); save(); render(); };
+    x.onclick = () => { forgetItem(i); items = items.filter(j => j.id !== i.id); save(); render(); };
     row.append(tm, t, x); box.append(row);
   }
 }
@@ -628,6 +663,8 @@ function fire(i) {
   if (loud) startAlarmSound(ringing); else { beep(2); speak(`${label.toLowerCase()}. ${i.title}`); }
   if (loud) setTimeout(() => { if (ringing && ringing.item === i && alarmMode() === "beep") speak(`${label.toLowerCase()}. ${i.title}`); }, 400);
   log(i.title, label);
+  if (i.src !== "cal" && !(i.gid && typeof calOn === "function" && calOn()))
+    phonePush(label === "TIME'S UP" ? "Time's up" : label[0] + label.slice(1).toLowerCase(), i.title, loud ? 5 : 4, [i.kind === "timer" ? "hourglass" : loud ? "alarm_clock" : "bell"]);
   render();
 }
 function stopRinging(announce) {
@@ -1147,7 +1184,7 @@ async function runTool(name, inp) {
   }
   if (name === "list_items") return upcoming().map(i => ({ id: i.id, kind: i.kind, title: i.title, datetime: localISO(i.at) }));
   if (name === "remove_item") {
-    const before = items.length; items = items.filter(i => i.id !== String(inp.id)); save(); render();
+    const before = items.length; forgetItem(items.find(i => i.id === String(inp.id))); items = items.filter(i => i.id !== String(inp.id)); save(); render();
     return before === items.length ? { error: "No item with that id" } : { ok: true };
   }
   if (name === "spotify_control") {
@@ -1459,6 +1496,7 @@ async function runBriefing() {
     brief = { at: Date.now(), markets: arr(data.markets), stories: arr(data.stories), spoken: String(data.spoken || ""), sources: [...sources] };
     lsSet("jarvis-brief", JSON.stringify(brief));
     renderBrief(); briefToast(); chirp();
+    phonePush((new Date().getHours() < 12 ? "Morning" : new Date().getHours() < 17 ? "Afternoon" : "Evening") + " briefing", briefText(brief), 3, ["newspaper"]);
     speak(brief.spoken || "Your briefing is ready.");
     log("Briefing ready", "BRIEF");
   } catch (e) {
@@ -1475,6 +1513,14 @@ async function runBriefing() {
   }
 }
 $("briefNow").addEventListener("click", () => { armAudio(); if (!apiKey) { say("sys", "Add an API key in Settings first, then I can fetch your briefing."); return; } runBriefing(); });
+function briefText(b) {
+  const lines = [b.spoken || ""];
+  const mk = arr(b.markets).slice(0, 6).map(m => `${m.symbol} ${m.change}${m.note ? " - " + m.note : ""}`);
+  if (mk.length) lines.push("", "MARKETS", ...mk);
+  const st = arr(b.stories).slice(0, 8).map(x => `• ${x.tag ? x.tag + ": " : ""}${x.headline}`);
+  if (st.length) lines.push("", "NEWS", ...st);
+  return lines.join("\n").trim();
+}
 function briefCheck() {
   if (!apiKey || briefBusy || Date.now() < briefRetryAt) return;
   if (!brief || brief.at < lastSlot()) runBriefing();
@@ -1532,6 +1578,8 @@ function schoolToast(fresh) {
   open.onclick = () => { box.remove(); $("schoolPanel").scrollIntoView({ behavior: "smooth", block: "start" }); };
   ok.onclick = () => box.remove();
   acts.append(open, ok); box.append(ul, acts); toastBox().append(box);
+  phonePush(fresh.length === 1 ? "New school task" : `${fresh.length} new school tasks`,
+    fresh.slice(0, 6).map(t => `${t.course || "Class"}: ${t.title}` + (typeof t.due === "number" ? ` (due ${dayWord(new Date(t.due)).toLowerCase()} ${fmt(t.due)})` : "")).join("\n"), 4, ["books"]);
   const f = fresh[0];
   speak(fresh.length === 1 ? `New assignment for ${f.course || "class"}: ${f.title}.` : `You have ${fresh.length} new school tasks.`);
 }
@@ -1759,8 +1807,22 @@ function loadGis() {
     document.head.append(sc);
   });
 }
+let gServer = false, gExpired = false; // lasting Google sign-in kept (encrypted) by the Jarvis server
+async function gServerStatus() {
+  try {
+    const j = await (await api("/api/google/status")).json();
+    gServer = !!j.connected && !j.expired; gExpired = !!j.expired;
+    if (gServer && j.client_id) { lsSet("jarvis-google-client", j.client_id); lsSet("jarvis-google-connected", "1"); }
+  } catch { gServer = false; }
+}
 async function gToken(interactive) {
   if (ws.token && Date.now() < ws.tokenExp) return ws.token;
+  if (gServer) {
+    const r = await api("/api/google/token"), j = await r.json().catch(() => ({}));
+    if (r.ok && j.token) { ws.token = j.token; ws.tokenExp = Date.now() + Math.max(60, (j.expires_in || 600) - 60) * 1000; return ws.token; }
+    if (r.status === 401 || j.expired) { gServer = false; gExpired = true; if (typeof showPhone === "function") showPhone(); throw new Error("Google signed Jarvis out. Reconnect Google in the Phone panel."); }
+    throw new Error(j.error || "Couldn't get a Google sign-in.");
+  }
   if (!gClientId()) throw new Error("Connect Google first (Workspace panel).");
   await loadGis();
   return new Promise((res, rej) => {
@@ -1801,7 +1863,7 @@ $("gConnect").addEventListener("click", async () => {
 async function refreshList() {
   const box = $("wsList"); box.textContent = "";
   let items = recent().filter(r => r.kind === ws.tab);
-  if (gClientId() && lsGet("jarvis-google-connected") === "1" && ws.token) {
+  if (gServer || (gClientId() && lsGet("jarvis-google-connected") === "1" && ws.token)) {
     try {
       const q = encodeURIComponent(`mimeType='${KIND[ws.tab].mime}' and trashed=false`);
       const j = await gFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=modifiedTime desc&pageSize=30&fields=files(id,name,modifiedTime)`);
@@ -1978,6 +2040,126 @@ $("wsGo").addEventListener("click", async () => {
 $("wsAsk").addEventListener("keydown", e => { if (e.key === "Enter") $("wsGo").click(); });
 $("gClient").value = gClientId();
 showGState(); setTab("docs");
+
+/* ---------- phone: ntfy pop-ups + two-way Google Calendar sync ---------- */
+function newTopic() { const a = new Uint8Array(15); crypto.getRandomValues(a); return "jarvis-" + [...a].map(b => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join(""); }
+const ntfyTopic = () => { let t = lsGet("jarvis-ntfy-topic"); if (!t) { t = newTopic(); lsSet("jarvis-ntfy-topic", t); } return t; };
+const ntfyOn = () => lsGet("jarvis-ntfy-on") === "1";
+async function phonePush(title, message, priority = 3, tags = [], force = false) {
+  if (!force && !ntfyOn()) return false;
+  try { const r = await api("/api/ntfy", { method: "POST", body: JSON.stringify({ topic: ntfyTopic(), title, message, priority, tags }) }); return r.ok; } catch { return false; }
+}
+const CAL = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
+const calOn = () => gServer && lsGet("jarvis-cal-on") === "1";
+let calBusy = false, calLast = 0;
+function calMsg(t, bad) { $("calMsg").textContent = t || ""; $("calMsg").style.color = bad ? "var(--red)" : "var(--muted)"; }
+async function calFetch(url, opts = {}) {
+  const t = await gToken(false);
+  const r = await fetch(url, { ...opts, headers: { Authorization: "Bearer " + t, "Content-Type": "application/json" } });
+  if (r.status === 401) ws.token = null;
+  const j = r.status === 204 ? {} : await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, j, err: (j.error && j.error.message) || "Google Calendar said HTTP " + r.status };
+}
+const plainTitle = t => String(t || "").replace(/^(\u23F0|\uD83D\uDD14)\s*/, "").trim();
+async function calSync() {
+  if (!calOn() || calBusy) return;
+  calBusy = true; calQuiet = true;
+  try {
+    // 1. things you deleted in Jarvis
+    let gone = []; try { gone = JSON.parse(lsGet("jarvis-cal-gone") || "[]"); } catch {}
+    for (const gid of [...gone]) {
+      const r = await calFetch(`${CAL}/${encodeURIComponent(gid)}`, { method: "DELETE" });
+      if (!r.ok && ![404, 410].includes(r.status)) throw new Error(r.err);
+      gone = gone.filter(g => g !== gid); lsSet("jarvis-cal-gone", JSON.stringify(gone));
+    }
+    // 2. new alarms and reminders from Jarvis -> Calendar
+    for (const i of items) {
+      if (i.gid || i.src === "cal" || i.fired || !["alarm", "reminder"].includes(i.kind) || i.at < Date.now() + 60e3) continue;
+      const mins = i.kind === "alarm" ? 5 : 15;
+      const r = await calFetch(CAL, { method: "POST", body: JSON.stringify({
+        summary: (i.kind === "alarm" ? "\u23F0 " : "\uD83D\uDD14 ") + i.title, description: "Set by Jarvis",
+        start: { dateTime: new Date(i.at).toISOString() }, end: { dateTime: new Date(i.at + mins * 60e3).toISOString() },
+        reminders: { useDefault: false, overrides: [{ method: "popup", minutes: 0 }] },
+        extendedProperties: { private: { jarvis: "1", jid: i.id, kind: i.kind } } }) });
+      if (!r.ok) throw new Error(r.err);
+      i.gid = r.j.id; save();
+    }
+    // 3. Calendar -> Jarvis (events added, moved or deleted on your phone)
+    const q = new URLSearchParams({ timeMin: new Date(Date.now() - 30 * 60e3).toISOString(), timeMax: new Date(Date.now() + 14 * 864e5).toISOString(),
+      singleEvents: "true", showDeleted: "true", maxResults: "250", orderBy: "startTime" });
+    const r = await calFetch(`${CAL}?${q}`);
+    if (!r.ok) throw new Error(r.err);
+    let changed = false;
+    for (const e of r.j.items || []) {
+      const priv = (e.extendedProperties && e.extendedProperties.private) || {}, mine = priv.jarvis === "1";
+      const local = items.find(i => i.gid === e.id) || (mine ? items.find(i => i.id === priv.jid) : null);
+      if (e.status === "cancelled") { if (local) { items = items.filter(i => i !== local); changed = true; } continue; }
+      if (gone.includes(e.id)) continue;
+      const at = e.start && e.start.dateTime ? Date.parse(e.start.dateTime) : NaN;
+      if (!Number.isFinite(at)) continue; // all-day events have no time to ring at
+      const title = plainTitle(e.summary) || "(No title)";
+      if (local) {
+        if (Math.abs(local.at - at) > 30e3) { local.at = at; if (at > Date.now()) local.fired = false; changed = true; }
+        if (local.title !== title) { local.title = title; changed = true; }
+        if (local.gid !== e.id) { local.gid = e.id; changed = true; }
+      } else if (at > Date.now()) {
+        items.push({ id: mine && priv.jid ? priv.jid : "cal-" + e.id, kind: mine && ["alarm", "reminder"].includes(priv.kind) ? priv.kind : "reminder",
+          title, at, fired: false, gid: e.id, src: mine ? undefined : "cal" });
+        changed = true;
+      }
+    }
+    if (changed) { save(); render(); }
+    calLast = Date.now(); calMsg("Synced with Google Calendar at " + fmt(calLast) + ".");
+  } catch (e) {
+    calMsg("Calendar sync failed: " + e.message + (/has not been used|disabled/i.test(e.message) ? " Enable the Google Calendar API in Google Cloud, then click Sync now." : ""), true);
+  } finally { calBusy = false; calQuiet = false; }
+}
+function showPhone() {
+  $("ntfyOn").checked = ntfyOn(); $("ntfyBox").hidden = !ntfyOn(); $("ntfyTopic").textContent = ntfyTopic();
+  $("calSetup").hidden = gServer; $("calOnRow").hidden = !gServer; $("calOn").checked = calOn();
+  if (!$("calClient").value) $("calClient").value = gClientId();
+  if (gExpired && !gServer) calMsg("Google signed Jarvis out. This happens every 7 days while your Google app isn't published (step 4). Click Connect Google again.", true);
+  const bits = [ntfyOn() ? "pop-ups on" : "", calOn() ? "calendar synced" : ""].filter(Boolean);
+  $("phoneState").textContent = bits.length ? bits.join(" · ") : "not linked";
+}
+$("ntfyOn").addEventListener("change", e => { lsSet("jarvis-ntfy-on", e.target.checked ? "1" : null); showPhone(); });
+$("ntfyCopy").addEventListener("click", async () => { try { await navigator.clipboard.writeText(ntfyTopic()); $("ntfyMsg").textContent = "Topic copied."; } catch { $("ntfyMsg").textContent = "Select the topic and copy it."; } });
+$("ntfyTest").addEventListener("click", async () => {
+  $("ntfyMsg").textContent = "Sending…";
+  $("ntfyMsg").textContent = await phonePush("Jarvis", "Test notification. Your phone is linked.", 4, ["white_check_mark"], true)
+    ? "Sent. It should pop up on your phone in a few seconds." : "Couldn't send. Check your internet connection and that the Jarvis server is running.";
+});
+$("ntfyNew").addEventListener("click", () => { lsSet("jarvis-ntfy-topic", newTopic()); showPhone(); $("ntfyMsg").textContent = "New topic made. Subscribe to it in the ntfy app (and remove the old one)."; });
+$("calConnect").addEventListener("click", async () => {
+  const client_id = $("calClient").value.trim(), client_secret = $("calSecret").value.trim();
+  calMsg("");
+  try {
+    const r = await api("/api/google/start", { method: "POST", body: JSON.stringify({ client_id, client_secret }) }), j = await r.json();
+    if (!r.ok) throw new Error(j.error || "Couldn't start Google sign-in.");
+    const w = window.open(j.url, "jarvisGoogle", "width=520,height=700");
+    if (!w) throw new Error("Pop-up blocked. Allow pop-ups for this page and try again.");
+    calMsg("Finish signing in in the Google window…");
+    for (let n = 0; n < 150; n++) {
+      await new Promise(res => setTimeout(res, 2000));
+      await gServerStatus();
+      if (gServer) break;
+    }
+    if (!gServer) throw new Error("Google sign-in didn't finish. Check step 2 (the redirect address), then try again.");
+    $("calSecret").value = ""; ws.token = null; gExpired = false;
+    lsSet("jarvis-cal-on", "1"); showPhone(); showGState(); log("Google connected for good", "PHONE");
+    calSync(); refreshList();
+  } catch (e) { calMsg(e.message, true); }
+});
+$("calOn").addEventListener("change", e => { lsSet("jarvis-cal-on", e.target.checked ? "1" : null); showPhone(); if (e.target.checked) calSync(); else calMsg("Calendar sync is off."); });
+$("calNow").addEventListener("click", () => calSync());
+$("calDisconnect").addEventListener("click", async () => {
+  await api("/api/google/forget", { method: "POST", body: "{}" }).catch(() => {});
+  gServer = false; ws.token = null; lsSet("jarvis-google-connected", null); lsSet("jarvis-cal-on", null);
+  showPhone(); showGState(); calMsg("Google disconnected. Jarvis no longer has access.");
+});
+showPhone();
+gServerStatus().then(() => { showPhone(); showGState(); calSync(); });
+setInterval(calSync, 3 * 60e3);
 
 /* ---------- holographic globe: rotating dot-matrix Earth with continent labels ---------- */
 (function globe() {

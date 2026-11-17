@@ -22,6 +22,7 @@ Bring your own AI: it works with a **Claude (Anthropic)** or **OpenAI** API key,
 | 📺 **YouTube** | A YouTube screen inside Jarvis: search for videos, paste a link, or ask "play lo-fi study music" and Jarvis finds and plays it. An open palm pauses and resumes. |
 | 📸 **Instagram** | One-click Feed, Reels, Messages and Explore in a window beside Jarvis, and paste any post or reel link to watch it inside Jarvis. |
 | 📁 **Files** | Browse folders you choose (like your uni folder), search them, preview PDFs and images, and open files on your computer, or just ask Jarvis to find and open one. Read-only. |
+| 📱 **Phone** | Alarms, reminders, new school tasks and the briefing pop up on your phone (free ntfy app), and alarms and reminders sync both ways with Google Calendar, so your phone alerts you even when the laptop is off. |
 | 🔊 **Volume** | Change your computer's volume with a pinch gesture or by asking. |
 
 ## Requirements
@@ -95,6 +96,17 @@ If your school email is a separate Google account, forward it to your Gmail firs
 
 Jarvis only asks for access to Docs, Slides and the Drive files it creates or opens. AI-written text is a starting point; check it, and follow your university's rules on AI use.
 
+### Phone (pop-ups and Google Calendar)
+**Pop-ups:** install the free **ntfy** app on your phone ([iPhone](https://apps.apple.com/app/ntfy/id1625396347), [Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy)). In Jarvis's **Phone** panel, tick the box, then subscribe to the topic it shows. Alarms, reminders, new school tasks and the briefing pop up on your phone with sound, even while you're using other apps. Keep the topic secret: anyone who knows it can read those pop-ups, and they pass through ntfy.sh.
+
+**Google Calendar sync** (uses the Google Cloud project from the Workspace setup):
+1. Enable the **Google Calendar API**.
+2. Open **Credentials**, click your OAuth client, and add `http://127.0.0.1:8000/oauth/google` under **Authorized redirect URIs**.
+3. Copy the **Client secret** and paste it, with the Client ID, into the **Phone** panel. Click **Connect Google**.
+4. In **OAuth consent screen → Audience**, click **Publish app**. Otherwise Google signs Jarvis out every 7 days. Google will warn that the app isn't verified; it's your own app, so continue.
+
+Alarms and reminders you set in Jarvis appear in your calendar with an alert, and timed events you add on your phone appear in Jarvis. The sign-in is encrypted on your computer and also powers Docs and Slides, so you no longer need to reconnect every hour.
+
 ### Desktop app (Instagram live inside Jarvis)
 Instagram blocks being shown inside web pages, so in Chrome it opens in a side window. To have it **live inside the Instagram panel**, run Jarvis as a desktop app:
 1. Install [Node.js](https://nodejs.org) (the LTS version).
@@ -114,6 +126,7 @@ On Windows, open **Settings → Time & language → Speech → Add voices** and 
 - **The server only listens on `127.0.0.1`**, so other devices on your network can't reach it. It rejects requests from other websites (including DNS-rebinding tricks) and sends a strict security policy so the page can only talk to Anthropic, OpenAI, Spotify and the hand-tracking library.
 - **Files:** Jarvis can only see folders you add in the Files panel, never changes or deletes anything, and won't run programs or scripts (they're only shown in Explorer). Previews need a secret that changes every time the server starts, so other websites can't read your files, and file names are never written to the log. File contents never leave your computer. The AI can't search your files unless you tick **Let the AI search these files** in the Files panel, and even then it only sees file names.
 - **Only your computer can connect:** the server refuses any connection that doesn't come from this computer, and on Windows it locks its port so no other program can take it over.
+- **Phone:** pop-ups go through ntfy.sh to the secret topic shown in the Phone panel. Calendar sync talks only to your own Google account.
 - **Camera video** is processed in your browser and never uploaded.
 - Calling AI APIs straight from the browser is fine for a personal app on your own computer. **Don't host this page on a public website with your key in it.**
 
