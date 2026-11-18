@@ -107,6 +107,15 @@ Jarvis only asks for access to Docs, Slides and the Drive files it creates or op
 
 Alarms and reminders you set in Jarvis appear in your calendar with an alert, and timed events you add on your phone appear in Jarvis. The sign-in is encrypted on your computer and also powers Docs and Slides, so you no longer need to reconnect every hour.
 
+### Phone app
+A phone version of Jarvis lives in the `docs` folder and runs on GitHub Pages, free. It has chat with voice, your Google Calendar agenda (add alarms and reminders, and your phone alerts you for them), and the briefing. It installs like an app: open it in Safari or Chrome, then **Add to Home Screen**.
+
+1. Fork this repo, then in your fork go to **Settings → Pages**, choose **Deploy from a branch**, pick **main** and **/docs**, and save. Your app will be at `https://<your-username>.github.io/<repo-name>/`.
+2. In the laptop Jarvis, open the **Phone** panel, put that address in **Jarvis on your phone**, and click **Show QR code**. Scan it with your phone's camera: the app opens with your settings filled in. Tick **Include my API key** if you want the key copied too; the code then disappears after 90 seconds.
+3. For the agenda, add the address shown in the app's **Settings → Google Calendar** to your OAuth client (Authorized JavaScript origins and redirect URIs).
+
+The key and settings are stored only on your phone. The QR code's settings sit after the `#` in the link, which browsers never send to any server, and the app removes them from the address as soon as it reads them.
+
 ### Desktop app (Instagram live inside Jarvis)
 Instagram blocks being shown inside web pages, so in Chrome it opens in a side window. To have it **live inside the Instagram panel**, run Jarvis as a desktop app:
 1. Install [Node.js](https://nodejs.org) (the LTS version).
@@ -138,6 +147,7 @@ On Windows, open **Settings → Time & language → Speech → Add voices** and 
 | `jarvis_server.py` | Small local server: serves the page, controls volume, reads school emails |
 | `package.json`, `desktop_main.js`, `desktop_preload.js` | Optional desktop app (Electron) with Instagram docked inside |
 | `Start Jarvis.vbs`, `jarvis.ico` | Double-click launcher for the desktop app (no command window) and its icon |
+| `docs/` | The phone app (installable web app) |
 | `jarvis_gestures.py` | Optional standalone Python gesture demo (`pip install mediapipe==0.10.21 "numpy<2" opencv-contrib-python==4.10.0.84`) |
 
 ## License

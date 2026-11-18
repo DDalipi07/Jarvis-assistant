@@ -506,6 +506,13 @@ form.ask input{flex:1}
             <button class="linkbtn" id="calDisconnect" type="button">Disconnect Google</button>
           </div>
           <p id="calMsg"></p>
+          <label class="lbl">Jarvis on your phone</label>
+          <p>Scan this code with your phone's camera to open the Jarvis phone app with your settings already filled in. Then add it to your home screen.</p>
+          <input type="text" id="mUrl" aria-label="Phone app address" autocomplete="off">
+          <label class="tog" style="font-size:12px"><input type="checkbox" id="qrKey"> Include my API key, so I don't have to type it on my phone</label>
+          <button class="btn ghost" id="qrShow" type="button" style="align-self:flex-start">Show QR code</button>
+          <div id="qrBox" hidden style="background:#fff;padding:10px;border-radius:8px;align-self:flex-start;line-height:0"></div>
+          <p id="qrMsg"></p>
         </div>
       </section>
 
@@ -2156,6 +2163,37 @@ $("calDisconnect").addEventListener("click", async () => {
   await api("/api/google/forget", { method: "POST", body: "{}" }).catch(() => {});
   gServer = false; ws.token = null; lsSet("jarvis-google-connected", null); lsSet("jarvis-cal-on", null);
   showPhone(); showGState(); calMsg("Google disconnected. Jarvis no longer has access.");
+});
+/* hand settings to the phone app with a QR code (the part after # never leaves your devices) */
+const MOBILE_DEFAULT = "https://ddalipi07.github.io/Jarvis-assistant/";
+$("mUrl").value = lsGet("jarvis-mobile-url") || MOBILE_DEFAULT;
+function loadQR() {
+  return new Promise((res, rej) => {
+    if (window.qrcode) return res();
+    const sc = document.createElement("script");
+    sc.src = "https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js";
+    sc.integrity = "sha384-8FWZA6BGMXhsfO+BLtrJK0We6gg5o1JyO8xQm6peWDEUs17ACA5ziE/NIAkl9z2k"; sc.crossOrigin = "anonymous";
+    sc.onload = () => res(); sc.onerror = () => rej(new Error("Couldn't load the QR code maker. Check your internet connection."));
+    document.head.append(sc);
+  });
+}
+let qrTimer = null;
+$("qrShow").addEventListener("click", async () => {
+  const base = $("mUrl").value.trim().replace(/#.*$/, "");
+  if (!/^https:\/\/[^\s]+$/.test(base)) { $("qrMsg").textContent = "Enter the phone app's address (it starts with https://)."; return; }
+  lsSet("jarvis-mobile-url", base === MOBILE_DEFAULT ? null : base);
+  const data = { p: { provider: prefs.provider, models: prefs.models, name: prefs.name, city: prefs.city, stocks: prefs.stocks, topics: prefs.topics } };
+  if (gClientId()) data.g = gClientId();
+  if ($("qrKey").checked && apiKey) data.k = { p: provider(), v: apiKey };
+  const code = btoa(unescape(encodeURIComponent(JSON.stringify(data)))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  try {
+    await loadQR();
+    const qr = qrcode(0, "L"); qr.addData(base + "#setup=" + code); qr.make();
+    $("qrBox").innerHTML = qr.createSvgTag(4, 2); $("qrBox").hidden = false;
+    $("qrMsg").textContent = data.k ? "This code contains your API key: don't show it to anyone or screenshot it. It disappears in 90 seconds." : "It disappears in 90 seconds.";
+    clearTimeout(qrTimer);
+    qrTimer = setTimeout(() => { $("qrBox").hidden = true; $("qrBox").textContent = ""; $("qrMsg").textContent = ""; }, 90e3);
+  } catch (e) { $("qrMsg").textContent = e.message; }
 });
 showPhone();
 gServerStatus().then(() => { showPhone(); showGState(); calSync(); });

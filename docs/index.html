@@ -1,0 +1,769 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self' https://api.anthropic.com https://api.openai.com https://www.googleapis.com; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#060c13">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Jarvis">
+<title>Jarvis</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --void:#060c13; --panel:#0b1520; --panel-2:#0f1c2a; --line:#1c3246; --line-hi:#2a4a66;
+  --cyan:#4fd6ff; --cyan-dim:#1f6f8c; --amber:#ffb547; --red:#ff6b6b; --green:#5be3a6;
+  --text:#d6e6f1; --muted:#7f98ab;
+  --f-display:"Chakra Petch","Segoe UI",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  --tabs:64px;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;background:var(--void);color:var(--text);height:100%}
+body{font-family:var(--f-body);font-size:15px;line-height:1.5;display:flex;flex-direction:column;height:100dvh;overflow:hidden;
+  background-image:radial-gradient(circle at 1px 1px,rgba(79,214,255,.07) 1px,transparent 0);background-size:22px 22px;-webkit-tap-highlight-color:transparent}
+header{flex:none;display:flex;align-items:center;gap:12px;padding:calc(10px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));border-bottom:1px solid var(--line);background:rgba(6,12,19,.92)}
+.core-cv{width:52px;height:52px;flex:none;border-radius:50%;cursor:pointer}
+.brand{font-family:var(--f-display);font-weight:600;letter-spacing:.3em;font-size:18px;color:var(--cyan);flex:1;min-width:0}
+.brand small{display:block;font:11px var(--f-mono);letter-spacing:.06em;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.clock{font:500 20px var(--f-mono);font-variant-numeric:tabular-nums}
+main{flex:1;min-height:0;position:relative}
+.view{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px max(16px,env(safe-area-inset-right,0px)) 18px max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:14px}
+.view[hidden]{display:none}
+#vChat{padding-bottom:0;gap:0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;min-width:0}
+.ph{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);font:12px var(--f-display);letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+.ph em{font-style:normal;color:var(--cyan);letter-spacing:.06em;text-transform:none;font-family:var(--f-mono);font-size:11px;text-align:right}
+.chat{flex:1;display:flex;flex-direction:column;gap:10px;padding-bottom:12px}
+.msg{max-width:88%;padding:9px 12px;border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg.me{align-self:flex-end;background:var(--panel-2);border:1px solid var(--line-hi)}
+.msg.ai{align-self:flex-start;border-left:2px solid var(--cyan);border-radius:0;padding-left:12px}
+.msg.ai::before{content:"JARVIS";display:block;font:10px var(--f-mono);letter-spacing:.18em;color:var(--cyan);margin-bottom:2px}
+.msg.sys{align-self:center;font:12px var(--f-mono);color:var(--muted);text-align:center;max-width:100%}
+.msg .src{display:block;margin-top:6px;font:11px var(--f-mono);color:var(--muted)}
+.msg .src a{color:var(--cyan)}
+.chips{display:flex;gap:6px;overflow-x:auto;padding:4px 0 10px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;font:12px var(--f-mono);color:var(--cyan);background:transparent;border:1px solid var(--line-hi);border-radius:20px;padding:6px 12px}
+.askbar{position:sticky;bottom:0;display:flex;gap:8px;padding:10px 0 12px;background:linear-gradient(transparent,var(--void) 14px)}
+input,select,button,textarea{font:inherit;color:var(--text)}
+input[type=text],input[type=password],input[type=datetime-local],select{background:var(--void);border:1px solid var(--line-hi);border-radius:6px;padding:11px 12px;min-width:0;width:100%;font-size:16px}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
+#q{flex:1}
+.btn{background:var(--cyan);color:#04121a;border:0;border-radius:6px;padding:11px 16px;font-family:var(--f-display);font-weight:600;letter-spacing:.08em;cursor:pointer;white-space:nowrap}
+.btn:disabled{opacity:.5}
+.btn.ghost{background:transparent;color:var(--cyan);border:1px solid var(--line-hi)}
+.mic{width:46px;padding:0;font-size:18px;flex:none}
+.mic.on{background:var(--red);border-color:var(--red);color:#fff}
+.setup{display:flex;flex-direction:column;gap:10px;padding:14px}
+.setup p,.setup ol{margin:0;font-size:13px;color:var(--muted)}
+.setup ol{padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.setup b{color:var(--text);font-weight:500}
+.lbl{font:11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:4px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row>input,.row>select{flex:1;min-width:140px}
+.linkbtn{background:none;border:0;color:var(--muted);font:12px var(--f-mono);text-decoration:underline;padding:0;align-self:flex-start;cursor:pointer}
+.tog{display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--muted)}
+.tog input{margin-top:3px}
+.err{color:var(--red);font-size:13px}
+.empty{padding:18px 14px;color:var(--muted);font-size:14px}
+.empty b{color:var(--text);font-weight:500}
+.group{padding:8px 14px 2px;font:11px var(--f-mono);letter-spacing:.14em;color:var(--muted);text-transform:uppercase}
+.item{display:grid;grid-template-columns:56px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid rgba(28,50,70,.6)}
+.item time{font:14px var(--f-mono);font-variant-numeric:tabular-nums}
+.item .t{min-width:0;overflow-wrap:anywhere}
+.k{display:inline-block;font:10px var(--f-mono);letter-spacing:.12em;text-transform:uppercase;padding:1px 6px;border-radius:3px;margin-right:6px;vertical-align:1px}
+.k.alarm{color:var(--amber);border:1px solid rgba(255,181,71,.45)}
+.k.reminder{color:var(--cyan);border:1px solid rgba(79,214,255,.45)}
+.k.event{color:var(--green);border:1px solid rgba(91,227,166,.45)}
+.x{background:none;border:0;color:var(--muted);font-size:22px;line-height:1;padding:4px 8px}
+.mk{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--line)}
+.tile{background:var(--panel);padding:10px 14px;min-width:0}
+.tile b{font:500 13px var(--f-mono);letter-spacing:.08em}
+.tile .chg{font:18px var(--f-mono);font-variant-numeric:tabular-nums;display:block}
+.chg.down{color:var(--red)} .chg.up{color:var(--green)} .chg.flat{color:var(--muted)}
+.tile small{display:block;color:var(--muted);font-size:12px;line-height:1.35;overflow-wrap:anywhere}
+.story{padding:10px 14px;border-top:1px solid rgba(28,50,70,.6)}
+.story .tag{font:10px var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--cyan)}
+.story h3{margin:2px 0;font:500 15px/1.35 var(--f-body)}
+.story p{margin:0;color:var(--muted);font-size:13px}
+.spoken{padding:12px 14px;font-size:14px}
+.bsrc{padding:8px 14px 12px;font:11px var(--f-mono);color:var(--muted);border-top:1px solid var(--line);overflow-wrap:anywhere}
+.bsrc a{color:var(--cyan)}
+nav.tabs{flex:none;display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line);background:rgba(6,12,19,.96);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav.tabs button{background:none;border:0;color:var(--muted);height:var(--tabs);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font:10px var(--f-mono);letter-spacing:.12em;text-transform:uppercase;cursor:pointer}
+nav.tabs button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+nav.tabs button[aria-selected=true]{color:var(--cyan)}
+.badge{font:10px var(--f-mono);color:var(--amber)}
+.alert{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;border:1px solid var(--amber);border-radius:8px;background:rgba(255,181,71,.08);font-size:14px}
+code{font:13px var(--f-mono);background:var(--panel-2);border:1px solid var(--line);border-radius:4px;padding:2px 6px;overflow-wrap:anywhere}
+</style>
+</head>
+<body>
+<header>
+  <canvas class="core-cv" id="coreCv" role="button" tabindex="0" aria-label="Talk to Jarvis"></canvas>
+  <div class="brand">J.A.R.V.I.S.<small id="status">Starting up…</small></div>
+  <div class="clock" id="clk">--:--</div>
+</header>
+
+<main>
+  <section class="view" id="vChat">
+    <div class="chat" id="chat" aria-live="polite">
+      <div class="msg ai">At your service. Ask me anything, or say "remind me to call Mom at 6pm".</div>
+    </div>
+    <div class="chips" id="chips">
+      <button class="chip" type="button">What's on today?</button>
+      <button class="chip" type="button">Remind me in 20 minutes to stretch</button>
+      <button class="chip" type="button">How are my stocks doing?</button>
+      <button class="chip" type="button">Weather today?</button>
+      <button class="chip" type="button">Latest news in Kosovo</button>
+    </div>
+    <form class="askbar" id="askForm">
+      <button class="btn ghost mic" id="micBtn" type="button" aria-label="Speak to Jarvis" hidden>&#127908;</button>
+      <input type="text" id="q" placeholder="Talk to Jarvis…" autocomplete="off" enterkeyhint="send" aria-label="Message to Jarvis">
+      <button class="btn" id="sendBtn" type="submit">Send</button>
+    </form>
+  </section>
+
+  <section class="view" id="vAgenda" hidden>
+    <div class="panel">
+      <div class="ph"><span>Agenda</span><em id="agCount">next 7 days</em></div>
+      <div id="agConnect" class="setup" hidden>
+        <p>Your agenda comes from your <b>Google Calendar</b>, the same one your laptop Jarvis syncs with. Alarms and reminders you set here go into it too, and your phone alerts you for them.</p>
+        <button class="btn" id="gGo" type="button">Connect Google Calendar</button>
+        <p id="gNote"></p>
+      </div>
+      <div id="agenda"></div>
+    </div>
+    <div class="panel">
+      <div class="ph"><span>Add</span></div>
+      <form class="setup" id="addForm" novalidate>
+        <div class="row">
+          <select id="kind" aria-label="Type" style="flex:0 0 120px;min-width:0"><option value="reminder">Reminder</option><option value="alarm">Alarm</option></select>
+          <input type="text" id="title" placeholder="What is it?" aria-label="Title">
+        </div>
+        <div class="row"><input type="datetime-local" id="when" aria-label="Date and time"><button class="btn ghost" type="submit">Add</button></div>
+        <p class="err" id="addErr"></p>
+      </form>
+    </div>
+  </section>
+
+  <section class="view" id="vBrief" hidden>
+    <div class="panel">
+      <div class="ph"><span id="briefTitle">Briefing</span><em id="briefTime">not yet</em></div>
+      <div id="briefBody"><div class="empty"><b>No briefing yet.</b><br>Tap the button for your markets and news update. Your laptop also sends one to your phone at 7:30 and 18:30.</div></div>
+    </div>
+    <div class="row"><button class="btn" id="briefNow" type="button">Get briefing now</button></div>
+    <label class="tog"><input type="checkbox" id="briefAuto"> Prepare it automatically after 7:30 and 18:30 when I open Jarvis</label>
+  </section>
+
+  <section class="view" id="vSettings" hidden>
+    <div class="panel">
+      <div class="ph"><span>AI</span><em id="brainNote">no key yet</em></div>
+      <div class="setup">
+        <label class="lbl" for="provPick">Provider</label>
+        <select id="provPick"><option value="claude">Claude (Anthropic)</option><option value="openai">OpenAI</option></select>
+        <label class="lbl" for="modelPick">Model</label>
+        <select id="modelPick"></select>
+        <input type="text" id="modelCustom" placeholder="Custom model name" aria-label="Custom model name" autocomplete="off" hidden>
+        <div id="keyBox" style="display:flex;flex-direction:column;gap:8px">
+          <label class="lbl" for="apiKey">API key</label>
+          <div class="row"><input type="password" id="apiKey" placeholder="Paste your API key" autocomplete="off"><button class="btn" id="saveKey" type="button">Save</button></div>
+        </div>
+        <p id="keyHelp"></p>
+        <p class="err" id="keyErr"></p>
+        <button class="linkbtn" id="forgetKey" type="button" hidden>Remove the API key from this phone</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="ph"><span>You</span></div>
+      <div class="setup">
+        <label class="lbl" for="pName">Your name</label><input type="text" id="pName" autocomplete="off">
+        <label class="lbl" for="pCity">Where you live</label><input type="text" id="pCity" placeholder="e.g. Lisbon, Portugal" autocomplete="off">
+        <label class="lbl" for="pStocks">Stocks</label><input type="text" id="pStocks" placeholder="e.g. NVDA, AAPL" autocomplete="off">
+        <label class="lbl" for="pTopics">News topics</label><input type="text" id="pTopics" placeholder="e.g. Portugal, World, Tech" autocomplete="off">
+        <label class="lbl" for="voicePick">Voice</label>
+        <div class="row"><select id="voicePick"></select><label class="tog" style="align-items:center"><input type="checkbox" id="voice" checked style="margin:0"> Speak</label></div>
+        <button class="btn ghost" id="saveProfile" type="button" style="align-self:flex-start">Save</button>
+        <p id="profMsg"></p>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="ph"><span>Google Calendar</span><em id="gState">not connected</em></div>
+      <div class="setup">
+        <label class="lbl" for="gClient">Google Client ID</label>
+        <input type="text" id="gClient" placeholder="…apps.googleusercontent.com" autocomplete="off">
+        <p>One-time: in Google Cloud → Credentials → your OAuth client, add <code id="gOrigin"></code> under <b>Authorized JavaScript origins</b> and <code id="gRedirect"></code> under <b>Authorized redirect URIs</b>.</p>
+        <div class="row"><button class="btn ghost" id="gSave" type="button">Save &amp; connect</button><button class="linkbtn" id="gForget" type="button" style="align-self:center">Disconnect</button></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="ph"><span>Install</span></div>
+      <div class="setup">
+        <p><b>iPhone:</b> in Safari, tap Share → <b>Add to Home Screen</b>. <b>Android:</b> in Chrome, tap ⋮ → <b>Add to Home screen</b> (or <b>Install app</b>).</p>
+        <p>Your key and settings are saved only on this phone. Nothing is stored on GitHub. Alarm and reminder alerts come from Google Calendar and the ntfy app, even when Jarvis is closed.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs" role="tablist">
+  <button type="button" role="tab" data-v="vChat" aria-selected="true"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>Chat</button>
+  <button type="button" role="tab" data-v="vAgenda" aria-selected="false"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>Agenda</button>
+  <button type="button" role="tab" data-v="vBrief" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M8 10h8M8 14h8M8 18h5"/></svg>Brief</button>
+  <button type="button" role="tab" data-v="vSettings" aria-selected="false"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>Settings</button>
+</nav>
+
+<script type="module">
+const $ = id => document.getElementById(id);
+const pad = n => String(n).padStart(2, "0");
+const fmt = ms => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} };
+const mkEl = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = String(text); return e; };
+const arr = v => Array.isArray(v) ? v : [];
+const addCost = () => {};
+let audio = null;
+const armAudio = () => { try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch {} };
+function chirp() { if (!audio) return; const o = audio.createOscillator(), g = audio.createGain(), t = audio.currentTime; o.frequency.value = 1320; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.2, t + .02); g.gain.exponentialRampToValueAtTime(.0001, t + .25); o.connect(g).connect(audio.destination); o.start(t); o.stop(t + .26); }
+
+/* ---------- tabs ---------- */
+function showTab(id) {
+  document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.v === id)));
+  document.querySelectorAll(".view").forEach(v => { v.hidden = v.id !== id; });
+  lsSet("jm-tab", id);
+  if (id === "vAgenda") loadAgenda();
+  if (id === "vChat") $("chat").lastElementChild && $("chat").lastElementChild.scrollIntoView({ block: "end" });
+}
+document.querySelectorAll("nav.tabs button").forEach(b => b.addEventListener("click", () => { armAudio(); showTab(b.dataset.v); }));
+
+/* ---------- clock ---------- */
+function tick() { $("clk").textContent = fmt(Date.now()); }
+tick(); setInterval(tick, 5000);
+
+/* ---------- voice ---------- */
+const VOICE_PREFS = [/Ryan.*Natural/i, /Thomas.*Natural/i, /Oliver.*Natural/i, /Google UK English Male/i, /Microsoft (George|Ryan)/i, /^Daniel/i, /Arthur/i, /en-GB.*male/i];
+let voiceList = [];
+function pickVoice() {
+  voiceList = (speechSynthesis.getVoices() || []);
+  let saved = null; try { saved = localStorage.getItem("jarvis-voice"); } catch {}
+  if (saved) { const v = voiceList.find(v => v.name === saved); if (v) return v; }
+  for (const re of VOICE_PREFS) { const v = voiceList.find(v => re.test(v.name)); if (v) return v; }
+  return voiceList.find(v => /en-GB/i.test(v.lang)) || voiceList.find(v => /^en/i.test(v.lang)) || null;
+}
+let jarvisVoice = null;
+if ("speechSynthesis" in window) { jarvisVoice = pickVoice(); speechSynthesis.onvoiceschanged = () => { jarvisVoice = pickVoice(); if (typeof fillVoices === "function") fillVoices(); }; }
+function speak(text) {
+  if (!$("voice").checked || !("speechSynthesis" in window)) return;
+  try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); if (jarvisVoice) { u.voice = jarvisVoice; u.lang = jarvisVoice.lang; } u.rate = 1.0; u.pitch = 0.95; speechSynthesis.speak(u); } catch {}
+}
+
+function fillVoices() {
+  const sel = $("voicePick"); if (!("speechSynthesis" in window)) { sel.disabled = true; return; }
+  const list = (speechSynthesis.getVoices() || []).filter(v => /^en/i.test(v.lang)).sort((a, b) => (/en-GB/i.test(b.lang) - /en-GB/i.test(a.lang)) || a.name.localeCompare(b.name));
+  sel.textContent = "";
+  for (const v of list) { const o = mkEl("option", "", `${v.name.replace(/^Microsoft |Online \(Natural\) - /g, "")} (${v.lang})`); o.value = v.name; sel.append(o); }
+  if (jarvisVoice) sel.value = jarvisVoice.name;
+}
+fillVoices();
+$("voicePick").addEventListener("change", e => { lsSet("jarvis-voice", e.target.value); jarvisVoice = pickVoice(); armAudio(); speak("Voice updated. At your service."); });
+$("voice").checked = lsGet("jm-voice") !== "0";
+$("voice").addEventListener("change", e => lsSet("jm-voice", e.target.checked ? "1" : "0"));
+
+/* ---------- settings ---------- */
+const PROVIDERS = {
+  claude: { name: "Claude", keyLS: "jarvis-api-key", prefix: "sk-ant-", help: "Get a key at platform.claude.com/settings/keys (add a little credit under Billing first).",
+    models: [["claude-haiku-5-5", "Haiku 5.5 — fastest, cheapest"], ["claude-sonnet-5-5", "Sonnet 5.5 — smarter"], ["claude-opus-5-5", "Opus 5.5 — most capable"]] },
+  openai: { name: "OpenAI", keyLS: "jarvis-openai-key", prefix: "sk-", help: "Get a key at platform.openai.com/api-keys (add credit under Billing first).",
+    models: [["gpt-6-astra", "GPT-6 Astra — most capable"], ["gpt-5.6-terra", "GPT-5.6 Terra — faster, cheaper"]] }
+};
+let prefs = { provider: "claude", models: { claude: "claude-haiku-5-5", openai: "gpt-6-astra" }, name: "", city: "", stocks: "NVDA, AAPL, TSLA, SPY", topics: "USA, World, Tech & markets" };
+try { const p = JSON.parse(lsGet("jarvis-settings") || "{}"); prefs = { ...prefs, ...p, models: { ...prefs.models, ...(p.models || {}) } }; } catch {}
+const savePrefs = () => lsSet("jarvis-settings", JSON.stringify(prefs));
+const provider = () => PROVIDERS[prefs.provider] ? prefs.provider : "claude";
+const providerName = () => PROVIDERS[provider()].name;
+const currentModel = () => prefs.models[provider()] || PROVIDERS[provider()].models[0][0];
+const stockList = () => String(prefs.stocks || "").split(/[,\s]+/).map(x => x.trim().toUpperCase()).filter(Boolean).slice(0, 8);
+const topicList = () => String(prefs.topics || "").split(/[,;]+/).map(x => x.trim()).filter(Boolean).slice(0, 6);
+let apiKey = "";
+
+/* Settings handed over from the laptop (QR code): read once, then wiped from the address. */
+(function importFromLaptop() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  const raw = h.get("setup"); if (!raw) return;
+  history.replaceState(null, "", location.pathname + location.search);
+  try {
+    const s = JSON.parse(decodeURIComponent(escape(atob(raw.replace(/-/g, "+").replace(/_/g, "/")))));
+    if (s.p) { prefs = { ...prefs, ...s.p, models: { ...prefs.models, ...(s.p.models || {}) } }; savePrefs(); }
+    if (s.g) lsSet("jarvis-google-client", s.g);
+    if (s.k && s.k.v && PROVIDERS[s.k.p]) lsSet(PROVIDERS[s.k.p].keyLS, s.k.v);
+    lsSet("jm-imported", "1");
+  } catch {}
+})();
+
+function fillModels() {
+  const sel = $("modelPick"); sel.textContent = "";
+  for (const [id, label] of PROVIDERS[provider()].models) { const o = mkEl("option", "", label); o.value = id; sel.append(o); }
+  const o = mkEl("option", "", "Other (type a model name)"); o.value = "__custom"; sel.append(o);
+  const known = PROVIDERS[provider()].models.some(([id]) => id === currentModel());
+  sel.value = known ? currentModel() : "__custom";
+  $("modelCustom").hidden = known; if (!known) $("modelCustom").value = currentModel();
+}
+function showKeyBox() {
+  apiKey = lsGet(PROVIDERS[provider()].keyLS) || "";
+  $("keyBox").hidden = !!apiKey; $("forgetKey").hidden = !apiKey;
+  $("keyHelp").textContent = (apiKey ? `${providerName()} key saved on this phone. ` : "") + PROVIDERS[provider()].help;
+  $("brainNote").textContent = apiKey ? `${providerName()} · ${currentModel()}` : "no key yet";
+  $("status").textContent = apiKey ? "Online · " + providerName() : "Add your API key in Settings";
+}
+function fillSettings() {
+  $("provPick").value = provider(); fillModels(); showKeyBox();
+  $("pName").value = prefs.name || ""; $("pCity").value = prefs.city || ""; $("pStocks").value = prefs.stocks || ""; $("pTopics").value = prefs.topics || "";
+}
+$("provPick").addEventListener("change", e => { prefs.provider = e.target.value; savePrefs(); fillModels(); showKeyBox(); convo.length = 0; });
+$("modelPick").addEventListener("change", e => { $("modelCustom").hidden = e.target.value !== "__custom"; if (e.target.value !== "__custom") { prefs.models[provider()] = e.target.value; savePrefs(); showKeyBox(); } });
+$("modelCustom").addEventListener("change", e => { const v = e.target.value.trim(); if (v) { prefs.models[provider()] = v; savePrefs(); showKeyBox(); } });
+$("saveKey").addEventListener("click", () => {
+  const k = $("apiKey").value.trim(), P = PROVIDERS[provider()];
+  if (!k.startsWith(P.prefix) || (provider() === "openai" && k.startsWith("sk-ant-"))) { $("keyErr").textContent = `That doesn't look like an ${P.name} API key. It starts with ${P.prefix}.`; return; }
+  lsSet(P.keyLS, k); $("apiKey").value = ""; $("keyErr").textContent = ""; showKeyBox(); say("sys", `${P.name} key saved. Jarvis is ready.`);
+});
+$("forgetKey").addEventListener("click", () => { lsSet(PROVIDERS[provider()].keyLS, null); showKeyBox(); });
+$("saveProfile").addEventListener("click", () => {
+  prefs.name = $("pName").value.trim().slice(0, 40); prefs.city = $("pCity").value.trim().slice(0, 80);
+  prefs.stocks = $("pStocks").value.trim().slice(0, 120); prefs.topics = $("pTopics").value.trim().slice(0, 200);
+  savePrefs(); $("profMsg").textContent = "Saved.";
+});
+
+/* ---------- Google Calendar (signs in by redirect, so it works inside the installed app) ---------- */
+const CAL = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
+const G_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+const redirectUri = () => location.origin + location.pathname.replace(/index\.html$/, "");
+const gClientId = () => lsGet("jarvis-google-client") || "";
+let gTok = null; try { gTok = JSON.parse(lsGet("jm-gtok") || "null"); } catch {}
+const gReady = () => gTok && gTok.t && Date.now() < gTok.exp;
+(function gReturn() {
+  if (!/access_token=|error=/.test(location.hash)) return;
+  const h = new URLSearchParams(location.hash.slice(1));
+  history.replaceState(null, "", location.pathname + location.search);
+  const want = sessionStorage.getItem("jm-gstate"); sessionStorage.removeItem("jm-gstate");
+  if (h.get("access_token") && want && h.get("state") === want) {
+    gTok = { t: h.get("access_token"), exp: Date.now() + (Number(h.get("expires_in") || 3600) - 120) * 1000 };
+    lsSet("jm-gtok", JSON.stringify(gTok)); lsSet("jm-g-on", "1");
+  }
+  lsSet("jm-tab", sessionStorage.getItem("jm-greturn") || "vAgenda");
+})();
+function gSignIn() {
+  if (!gClientId()) { showTab("vSettings"); $("gClient").focus(); return; }
+  const st = [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, "0")).join("");
+  sessionStorage.setItem("jm-gstate", st); sessionStorage.setItem("jm-greturn", lsGet("jm-tab") || "vAgenda");
+  location.href = "https://accounts.google.com/o/oauth2/v2/auth?" + new URLSearchParams({ client_id: gClientId(), redirect_uri: redirectUri(), response_type: "token", scope: G_SCOPE, include_granted_scopes: "true", state: st });
+}
+async function cal(url, opts = {}) {
+  if (!gReady()) { const e = new Error("Google Calendar isn't connected. Open the Agenda tab and tap Connect."); e.needsLogin = true; throw e; }
+  const r = await fetch(url, { ...opts, headers: { Authorization: "Bearer " + gTok.t, "Content-Type": "application/json" } });
+  const j = r.status === 204 ? {} : await r.json().catch(() => ({}));
+  if (r.status === 401) { gTok = null; lsSet("jm-gtok", null); const e = new Error("Google sign-in expired. Tap Connect on the Agenda tab."); e.needsLogin = true; throw e; }
+  if (!r.ok) throw new Error((j.error && j.error.message) || "Google Calendar said HTTP " + r.status);
+  return j;
+}
+const plainTitle = t => String(t || "").replace(/^(⏰|🔔)\s*/, "").trim();
+let agenda = [];
+async function fetchAgenda() {
+  const q = new URLSearchParams({ timeMin: new Date(Date.now() - 3600e3).toISOString(), timeMax: new Date(Date.now() + 7 * 864e5).toISOString(), singleEvents: "true", orderBy: "startTime", maxResults: "100" });
+  const j = await cal(`${CAL}?${q}`);
+  agenda = arr(j.items).filter(e => e.status !== "cancelled").map(e => {
+    const priv = (e.extendedProperties && e.extendedProperties.private) || {};
+    const allDay = !(e.start && e.start.dateTime);
+    return { id: e.id, title: plainTitle(e.summary) || "(No title)", at: allDay ? Date.parse(e.start.date + "T00:00") : Date.parse(e.start.dateTime), allDay,
+      kind: priv.jarvis === "1" ? (priv.kind || "reminder") : "event", mine: priv.jarvis === "1" };
+  });
+  return agenda;
+}
+function dayLabel(d) {
+  const t = new Date(), tm = new Date(); tm.setDate(t.getDate() + 1);
+  if (d.toDateString() === t.toDateString()) return "Today";
+  if (d.toDateString() === tm.toDateString()) return "Tomorrow";
+  return d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" });
+}
+function renderAgenda() {
+  const box = $("agenda"); box.textContent = "";
+  const up = agenda.filter(e => e.allDay || e.at > Date.now() - 3600e3);
+  $("agCount").textContent = `${up.length} in the next 7 days`;
+  if (!up.length) { box.append(mkEl("div", "empty", "Nothing in the next 7 days.")); return; }
+  let last = "";
+  for (const e of up) {
+    const lab = dayLabel(new Date(e.at));
+    if (lab !== last) { box.append(mkEl("div", "group", lab)); last = lab; }
+    const row = mkEl("div", "item");
+    const t = mkEl("div", "t"); t.append(mkEl("span", "k " + e.kind, e.kind), document.createTextNode(e.title));
+    row.append(mkEl("time", "", e.allDay ? "all day" : fmt(e.at)), t);
+    if (e.mine) { const x = mkEl("button", "x", "×"); x.type = "button"; x.setAttribute("aria-label", "Delete " + e.title); x.onclick = () => removeEvent(e.id).then(loadAgenda).catch(err => { $("addErr").textContent = err.message; }); row.append(x); }
+    else row.append(mkEl("span"));
+    box.append(row);
+  }
+}
+async function loadAgenda() {
+  const connected = gReady();
+  $("agConnect").hidden = connected;
+  $("gGo").textContent = lsGet("jm-g-on") === "1" ? "Reconnect Google Calendar" : "Connect Google Calendar";
+  $("gNote").textContent = lsGet("jm-g-on") === "1" ? "Google asks Jarvis to sign in again about once an hour. It only takes a tap." : "";
+  $("gState").textContent = connected ? "connected" : "not connected";
+  if (!connected) { $("agenda").textContent = ""; return; }
+  try { await fetchAgenda(); renderAgenda(); } catch (e) { $("agenda").textContent = ""; $("agenda").append(mkEl("div", "empty", e.message)); if (e.needsLogin) $("agConnect").hidden = false; }
+}
+async function addEvent(kind, title, at) {
+  const mins = kind === "alarm" ? 5 : 15;
+  const id = "m" + Date.now().toString(36);
+  const ev = await cal(CAL, { method: "POST", body: JSON.stringify({
+    summary: (kind === "alarm" ? "⏰ " : "🔔 ") + title, description: "Set by Jarvis (phone)",
+    start: { dateTime: new Date(at).toISOString() }, end: { dateTime: new Date(at + mins * 60e3).toISOString() },
+    reminders: { useDefault: false, overrides: [{ method: "popup", minutes: 0 }] },
+    extendedProperties: { private: { jarvis: "1", jid: id, kind } } }) });
+  return ev.id;
+}
+async function removeEvent(id) {
+  const e = agenda.find(x => x.id === id);
+  if (e && !e.mine) throw new Error("Jarvis only deletes alarms and reminders it created. Delete other events in Google Calendar.");
+  await cal(`${CAL}/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+function parseLocal(s) { const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(String(s || "").trim()); return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).getTime() : NaN; }
+$("gGo").addEventListener("click", gSignIn);
+$("addForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const title = $("title").value.trim(), at = parseLocal($("when").value);
+  if (!title) { $("addErr").textContent = "Give it a name first."; return; }
+  if (isNaN(at) || at < Date.now()) { $("addErr").textContent = "Pick a time in the future."; return; }
+  $("addErr").textContent = "";
+  try { await addEvent($("kind").value, title, at); $("title").value = ""; $("when").value = ""; loadAgenda(); }
+  catch (err) { $("addErr").textContent = err.message; }
+});
+$("gOrigin").textContent = location.origin; $("gRedirect").textContent = redirectUri();
+$("gClient").value = gClientId();
+$("gSave").addEventListener("click", () => {
+  const id = $("gClient").value.trim();
+  if (!/\.apps\.googleusercontent\.com$/.test(id)) { $("gClient").focus(); $("gState").textContent = "that isn't a Client ID"; return; }
+  lsSet("jarvis-google-client", id); gSignIn();
+});
+$("gForget").addEventListener("click", () => { gTok = null; lsSet("jm-gtok", null); lsSet("jm-g-on", null); loadAgenda(); });
+
+/* ---------- the AI brain (same code as the laptop Jarvis) ---------- */
+/* ---------- Claude (Anthropic Messages API) ---------- */
+const CLAUDE_SEARCH = [
+  { type: "web_search_20250305", name: "web_search" },
+  { type: "web_search_20260209", name: "web_search", allowed_callers: ["direct"] }
+];
+let searchSetup = Math.min(CLAUDE_SEARCH.length - 1, Number(lsGet("jarvis-search-setup") || 0) || 0);
+async function claudePost(body, search, maxUses) {
+  const model = currentModel();
+  for (let v = search ? searchSetup : 0; v < (search ? CLAUDE_SEARCH.length : 1); v++) {
+    const tools = [...(search ? [{ ...CLAUDE_SEARCH[v], max_uses: maxUses }] : []), ...(body.tools || [])];
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+      body: JSON.stringify({ ...body, model, tools })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) {
+      if (search && v !== searchSetup) { searchSetup = v; lsSet("jarvis-search-setup", String(v)); }
+      addCost(j.usage, model); return j;
+    }
+    const msg = (j.error && j.error.message) || "HTTP " + r.status;
+    console.warn("Claude API error", r.status, msg);
+    if (search && r.status === 400 && /web.?search|server_tool|not supported|allowed_callers/i.test(msg) && v < CLAUDE_SEARCH.length - 1) continue;
+    const e = new Error(msg); e.status = r.status; throw e;
+  }
+}
+async function claudeAgent({ system, messages, tools, search, maxUses, stopTool, force, onSearch, maxTokens }) {
+  const msgs = messages.map(m => ({ role: m.role, content: m.content }));
+  const ctools = tools.map(t => ({ name: t.name, description: t.description, input_schema: t.schema }));
+  const sources = new Map();
+  for (let round = 0; round < 10; round++) {
+    const body = { max_tokens: maxTokens, system, messages: msgs, tools: ctools };
+    if (force) body.tool_choice = { type: "tool", name: force };
+    const j = await claudePost(body, search, maxUses);
+    const content = j.content || [];
+    for (const b of content) {
+      if (b.type === "server_tool_use" && b.input && b.input.query && onSearch) onSearch(b.input.query);
+      if (b.type === "text" && Array.isArray(b.citations)) for (const c of b.citations) if (c.url) sources.set(c.url, c.title || c.url);
+      if (b.type === "web_search_tool_result" && Array.isArray(b.content)) for (const x of b.content.slice(0, 2)) if (x.url && !sources.has(x.url)) sources.set(x.url, x.title || x.url);
+    }
+    msgs.push({ role: "assistant", content });
+    const stop = stopTool && content.find(b => b.type === "tool_use" && b.name === stopTool);
+    if (stop) return { stop: stop.input || {}, text: "", sources };
+    if (j.stop_reason === "pause_turn") continue;
+    if (j.stop_reason === "tool_use") {
+      const results = [];
+      for (const b of content) if (b.type === "tool_use") {
+        const t = tools.find(t => t.name === b.name);
+        let out; try { out = t && t.run ? await t.run(b.input) : { error: "Unknown tool" }; } catch (e) { out = { error: String(e.message || e) }; }
+        results.push({ type: "tool_result", tool_use_id: b.id, content: JSON.stringify(out) });
+      }
+      msgs.push({ role: "user", content: results });
+      continue;
+    }
+    const text = content.filter(b => b.type === "text").map(b => b.text).join("").trim();
+    if (stopTool && round < 3) { msgs.push({ role: "user", content: `Please call the ${stopTool} tool now with what you found.` }); continue; }
+    return { stop: null, text, sources };
+  }
+  return { stop: null, text: "", sources };
+}
+
+/* ---------- OpenAI (Responses API) ---------- */
+async function openaiAgent({ system, messages, tools, search, stopTool, force, onSearch, maxTokens }) {
+  const model = currentModel();
+  const otools = [...(search ? [{ type: "web_search" }] : []), ...tools.map(t => ({ type: "function", name: t.name, description: t.description, parameters: t.schema, strict: false }))];
+  let input = messages.map(m => ({ role: m.role, content: m.content })), prev = null;
+  const sources = new Map();
+  for (let round = 0; round < 10; round++) {
+    const body = { model, instructions: system, input, tools: otools, max_output_tokens: Math.max(maxTokens, 4000) };
+    if (prev) body.previous_response_id = prev;
+    if (force) body.tool_choice = { type: "function", name: force };
+    const r = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + apiKey }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { const e = new Error((j.error && j.error.message) || "HTTP " + r.status); e.status = r.status; e.code = j.error && j.error.code; throw e; }
+    addCost(j.usage, model);
+    prev = j.id;
+    const out = j.output || [];
+    let text = "";
+    for (const it of out) {
+      if (it.type === "web_search_call" && onSearch) onSearch((it.action && it.action.query) || "the web");
+      if (it.type === "message") for (const c of it.content || []) if (c.type === "output_text") {
+        text += c.text || "";
+        for (const an of c.annotations || []) if (an.type === "url_citation" && an.url) sources.set(an.url, an.title || an.url);
+      }
+    }
+    const calls = out.filter(it => it.type === "function_call");
+    const stop = stopTool && calls.find(c => c.name === stopTool);
+    if (stop) { let a = {}; try { a = JSON.parse(stop.arguments || "{}"); } catch {} return { stop: a, text: "", sources }; }
+    if (calls.length) {
+      input = [];
+      for (const c of calls) {
+        const t = tools.find(t => t.name === c.name); let a = {}; try { a = JSON.parse(c.arguments || "{}"); } catch {}
+        let res; try { res = t && t.run ? await t.run(a) : { error: "Unknown tool" }; } catch (e) { res = { error: String(e.message || e) }; }
+        input.push({ type: "function_call_output", call_id: c.call_id, output: JSON.stringify(res) });
+      }
+      continue;
+    }
+    if (stopTool && round < 3) { input = [{ role: "user", content: `Please call the ${stopTool} tool now with what you found.` }]; continue; }
+    return { stop: null, text: text.trim(), sources };
+  }
+  return { stop: null, text: "", sources };
+}
+
+/* One entry point for both providers. tools: [{name, description, schema, run?}] */
+function agent(opts) {
+  const o = { tools: [], search: false, maxUses: 3, stopTool: null, force: null, onSearch: null, maxTokens: 1500, ...opts };
+  return provider() === "openai" ? openaiAgent(o) : claudeAgent(o);
+}
+function friendlyError(e) {
+  const p = providerName(), m = String(e.message || "");
+  if (e.status === 401) return `Your ${p} API key was rejected. Remove it in Settings and paste a new one.`;
+  if (/credit|insufficient_quota|billing/i.test(m + (e.code || ""))) return `Your ${p} account is out of credit. Add credit in your ${p} billing settings.`;
+  if (e.status === 404 || /model/i.test(m) && e.status === 400) return `${p} doesn't recognise the model "${currentModel()}". Pick another one in Settings.`;
+  if (e.status === 429) return "Too many requests. Give me a moment and ask again.";
+  if (e.status === 529 || e.status === 503) return `${p} is busy right now. Try again in a minute.`;
+  return "Couldn't reach my brain: " + m;
+}
+
+function nowLine() {
+  const d = new Date(), tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "local";
+  return `${d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}, ${fmt(d.getTime())} (${tz})`;
+}
+const localISO = ms => { const d = new Date(ms); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${fmt(ms)}`; };
+const obj = (properties, required) => ({ type: "object", properties, required });
+const TOOLS = [
+  { name: "add_item", description: "Set an alarm or reminder. It goes into the user's Google Calendar, so their phone alerts them even when Jarvis is closed.",
+    schema: obj({ kind: { type: "string", enum: ["alarm", "reminder"] }, title: { type: "string" }, datetime: { type: "string", description: "Local time, YYYY-MM-DDTHH:MM" } }, ["kind", "title", "datetime"]),
+    async run(i) { const at = parseLocal(i.datetime); if (isNaN(at)) return { error: "datetime must be YYYY-MM-DDTHH:MM" }; if (at < Date.now()) return { error: "That time has already passed." };
+      await addEvent(i.kind === "alarm" ? "alarm" : "reminder", String(i.title || "Reminder").slice(0, 140), at); return { ok: true, when: localISO(at) }; } },
+  { name: "list_items", description: "List the user's Google Calendar for the next 7 days (events, alarms, reminders, and school deadline reminders from their laptop Jarvis), with ids.",
+    schema: obj({}, []),
+    async run() { await fetchAgenda(); return agenda.map(e => ({ id: e.id, kind: e.kind, title: e.title, when: e.allDay ? new Date(e.at).toDateString() + " (all day)" : localISO(e.at), canDelete: e.mine })); } },
+  { name: "remove_item", description: "Delete an alarm or reminder that Jarvis created (canDelete true in list_items).",
+    schema: obj({ id: { type: "string" } }, ["id"]),
+    async run(i) { await removeEvent(String(i.id)); return { ok: true }; } }
+];
+function systemPrompt() {
+  return `You are JARVIS, the user's personal assistant: calm, quick, polite, a little dry and witty, like a refined British butler.${prefs.name ? " The user's name is " + prefs.name + "." : ""}${prefs.city ? " The user lives in " + prefs.city + "." : ""}
+You're running on the user's phone. Current local time: ${nowLine()}.
+You can set alarms and reminders and read their calendar (add_item, list_items, remove_item; these use Google Calendar), and search the web for news, stock prices, weather and facts.
+Rules:
+- Replies are spoken aloud: 1-4 short sentences, plain text, no markdown, no lists, no URLs.
+- Resolve relative times ("in 20 minutes", "tomorrow at 7") from the current local time. Confirm what you set with day and time.
+- If a calendar tool says Google isn't connected, tell the user to tap Connect on the Agenda tab.
+- Files, volume, Spotify and Instagram live on the laptop Jarvis; say so if asked.
+- Stocks: report facts only. Never tell the user to buy, sell or avoid a stock.`;
+}
+const convo = [];
+let brainBusy = false;
+function say(who, text) { const d = mkEl("div", "msg " + who, text); $("chat").append(d); d.scrollIntoView({ block: "end" }); return d; }
+async function ask(text) {
+  text = (text || "").trim();
+  if (!text || brainBusy) return;
+  if (!apiKey) { say("sys", "Add your API key in Settings first."); return; }
+  brainBusy = true; $("sendBtn").disabled = true; core.set("busy");
+  say("me", text);
+  const bubble = say("ai", "Thinking…");
+  try {
+    const res = await agent({ system: systemPrompt(), messages: [...convo.slice(-8), { role: "user", content: text }], tools: TOOLS, search: true, maxUses: 3,
+      onSearch: q => { bubble.textContent = `Searching: ${q}…`; } });
+    const answer = res.text || "Done.";
+    bubble.textContent = answer;
+    if (res.sources.size) {
+      const src = mkEl("span", "src", "Sources: ");
+      [...res.sources].slice(0, 3).forEach(([url, title], i) => { if (i) src.append(" · "); const a = mkEl("a", "", (title || url).slice(0, 40)); a.href = url; a.target = "_blank"; a.rel = "noopener"; src.append(a); });
+      bubble.append(src);
+    }
+    convo.push({ role: "user", content: text }, { role: "assistant", content: answer });
+    speak(answer);
+    if (!$("vAgenda").hidden) loadAgenda();
+  } catch (e) { bubble.className = "msg sys"; bubble.textContent = friendlyError(e); }
+  finally { brainBusy = false; $("sendBtn").disabled = false; core.set("idle"); bubble.scrollIntoView({ block: "end" }); }
+}
+$("askForm").addEventListener("submit", e => { e.preventDefault(); armAudio(); const v = $("q").value; $("q").value = ""; $("q").blur(); ask(v); });
+$("chips").addEventListener("click", e => { if (e.target.classList.contains("chip")) { armAudio(); ask(e.target.textContent); } });
+
+/* ---------- voice input ---------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (SR) {
+  $("micBtn").hidden = false;
+  let rec = null;
+  $("micBtn").addEventListener("click", () => {
+    armAudio();
+    if (rec) { rec.stop(); return; }
+    rec = new SR(); rec.lang = "en-US"; rec.interimResults = true; rec.maxAlternatives = 1;
+    $("micBtn").classList.add("on"); core.set("listen");
+    try { speechSynthesis.cancel(); } catch {}
+    rec.onresult = ev => { const t = Array.from(ev.results).map(r => r[0].transcript).join(""); $("q").value = t; if (ev.results[ev.results.length - 1].isFinal) { $("q").value = ""; ask(t); } };
+    rec.onerror = ev => { if (ev.error === "not-allowed") say("sys", "Microphone access was blocked. Allow it in your phone's settings for this browser."); };
+    rec.onend = () => { rec = null; $("micBtn").classList.remove("on"); if (!brainBusy) core.set("idle"); };
+    rec.start();
+  });
+}
+
+/* ---------- briefing ---------- */
+const SAVE_BRIEFING = { name: "save_briefing", description: "Save the finished briefing so it appears on the user's screen. Call exactly once, after searching.",
+  schema: { type: "object", properties: {
+    markets: { type: "array", items: { type: "object", properties: { symbol: { type: "string" }, change: { type: "string", description: "e.g. -4.2% or n/a" }, dir: { type: "string", enum: ["up", "down", "flat"] }, note: { type: "string", description: "price, session and a short factual reason" } }, required: ["symbol", "change", "dir", "note"] } },
+    stories: { type: "array", items: { type: "object", properties: { tag: { type: "string", description: "which news topic this belongs to" }, headline: { type: "string" }, detail: { type: "string" } }, required: ["tag", "headline", "detail"] } },
+    spoken: { type: "string", description: "2-3 sentence spoken summary" } },
+    required: ["markets", "stories", "spoken"] } };
+const BRIEF_PROMPT = () => `Prepare the user's briefing. Current local time: ${nowLine()}.${prefs.city ? " The user lives in " + prefs.city + "." : ""}
+Search the web (up to 5 searches) for:
+1. The latest moves for these stocks: ${stockList().join(", ") || "the S&P 500 (SPY)"}: % change, price, and a short factual reason if reported. Say which session the figures are from.
+2. Top news from the last 24 hours on these topics, 1-2 stories each: ${topicList().join("; ")}.
+When you have the facts, call the save_briefing tool once with everything (don't write the briefing as text). Use each topic's name as the story tag. Headlines under 90 characters. The spoken summary is 2-3 sentences in Jarvis's voice, starting with a greeting for the time of day${prefs.name ? " and the user's name, " + prefs.name : ""}.
+Use "n/a" for anything you couldn't verify. Facts only: never advise buying, selling or avoiding a stock. Describe political news neutrally.`;
+
+const BRIEF_SLOTS = [[7, 30], [18, 30]];
+function lastSlot(now = new Date()) {
+  let best = 0;
+  for (const off of [0, -1]) for (const [h, m] of BRIEF_SLOTS) { const d = new Date(now); d.setDate(d.getDate() + off); d.setHours(h, m, 0, 0); if (d <= now && d.getTime() > best) best = d.getTime(); }
+  return best;
+}
+let brief = null; try { brief = JSON.parse(lsGet("jm-brief") || "null"); } catch {}
+let briefBusy = false;
+function renderBrief() {
+  if (!brief) return;
+  const d = new Date(brief.at);
+  $("briefTitle").textContent = (d.getHours() < 12 ? "Morning" : d.getHours() < 17 ? "Afternoon" : "Evening") + " briefing";
+  $("briefTime").textContent = (d.toDateString() === new Date().toDateString() ? "Today " : d.toLocaleDateString("en-GB", { weekday: "short" }) + " ") + fmt(brief.at);
+  const body = $("briefBody"); body.textContent = "";
+  if (brief.spoken) body.append(mkEl("div", "spoken", brief.spoken));
+  const mk = arr(brief.markets);
+  if (mk.length) { const g = mkEl("div", "mk"); for (const m of mk.slice(0, 8)) { const t = mkEl("div", "tile"); t.append(mkEl("b", "", m.symbol || ""), mkEl("span", "chg " + (["up", "down"].includes(m.dir) ? m.dir : "flat"), m.change || "n/a"), mkEl("small", "", m.note || "")); g.append(t); } body.append(g); }
+  for (const s of arr(brief.stories).slice(0, 10)) { const st = mkEl("div", "story"); st.append(mkEl("div", "tag", s.tag || "News"), mkEl("h3", "", s.headline || "")); if (s.detail) st.append(mkEl("p", "", s.detail)); body.append(st); }
+  const src = arr(brief.sources).slice(0, 6);
+  if (src.length) { const b = mkEl("div", "bsrc", "Sources: "); src.forEach(([u, t], i) => { if (i) b.append(" · "); const a = mkEl("a", "", (t || u).slice(0, 36)); a.href = u; a.target = "_blank"; a.rel = "noopener"; b.append(a); }); body.append(b); }
+}
+async function runBriefing() {
+  if (!apiKey || briefBusy) { if (!apiKey) { $("briefBody").textContent = ""; $("briefBody").append(mkEl("div", "empty", "Add your API key in Settings first.")); } return; }
+  briefBusy = true; $("briefNow").disabled = true; $("briefTime").textContent = "updating…"; core.set("busy");
+  try {
+    const res = await agent({ system: "You are JARVIS, a concise, factual personal assistant.", messages: [{ role: "user", content: BRIEF_PROMPT() }],
+      tools: [SAVE_BRIEFING], search: true, maxUses: 5, stopTool: "save_briefing", maxTokens: 4000 });
+    const data = res.stop; if (!data) throw new Error("Jarvis didn't finish the briefing. Try again.");
+    brief = { at: Date.now(), markets: arr(data.markets), stories: arr(data.stories), spoken: String(data.spoken || ""), sources: [...res.sources] };
+    lsSet("jm-brief", JSON.stringify(brief)); renderBrief(); chirp(); speak(brief.spoken || "Your briefing is ready.");
+  } catch (e) { $("briefTime").textContent = "failed"; $("briefBody").textContent = ""; const b = mkEl("div", "empty", friendlyError(e)); b.style.color = "var(--red)"; $("briefBody").append(b); }
+  finally { briefBusy = false; $("briefNow").disabled = false; core.set("idle"); }
+}
+$("briefNow").addEventListener("click", () => { armAudio(); runBriefing(); });
+$("briefAuto").checked = lsGet("jm-brief-auto") === "1";
+$("briefAuto").addEventListener("change", e => lsSet("jm-brief-auto", e.target.checked ? "1" : null));
+function briefCheck() { if (lsGet("jm-brief-auto") === "1" && apiKey && (!brief || brief.at < lastSlot())) runBriefing(); }
+
+/* ---------- power core ---------- */
+function makeCore(cv) {
+  const ctx = cv.getContext("2d");
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const COL = { idle: [79, 214, 255], busy: [255, 181, 71], listen: [255, 107, 107] };
+  let mode = "idle", flashT = 0, a1 = 0, a2 = 0, a3 = 0, last = performance.now();
+  let rgb = COL.idle.slice();
+  function size() { const d = Math.min(2, window.devicePixelRatio || 1), r = cv.getBoundingClientRect(); cv.width = Math.round(r.width * d) || 168; cv.height = Math.round(r.height * d) || 168; }
+  size(); addEventListener("resize", size);
+  const c = (k, al) => `rgba(${rgb[0] | 0},${rgb[1] | 0},${rgb[2] | 0},${al})`;
+  function arc(r, start, len, w, al, blur) { ctx.beginPath(); ctx.arc(0, 0, r, start, start + len); ctx.lineWidth = w; ctx.strokeStyle = c(0, al); ctx.shadowBlur = blur; ctx.shadowColor = c(0, 1); ctx.stroke(); }
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    const target = COL[mode]; for (let i = 0; i < 3; i++) rgb[i] += (target[i] - rgb[i]) * Math.min(1, dt * 4);
+    const speed = reduce ? 0.15 : mode === "busy" ? 3.2 : mode === "listen" ? 2 : 1;
+    a1 += dt * 0.35 * speed; a2 -= dt * 0.8 * speed; a3 += dt * 1.9 * speed;
+    flashT = Math.max(0, flashT - dt * 2.2);
+    const W = cv.width, H = cv.height, R = Math.min(W, H) / 2, s = R / 100;
+    const pulse = reduce ? 0.85 : 0.75 + 0.25 * Math.sin(now / (mode === "busy" ? 180 : 650));
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H);
+    ctx.translate(W / 2, H / 2); ctx.lineCap = "round";
+    const halo = ctx.createRadialGradient(0, 0, 0, 0, 0, R);
+    halo.addColorStop(0, c(0, 0.35 + flashT * 0.4)); halo.addColorStop(0.45, c(0, 0.12)); halo.addColorStop(1, c(0, 0));
+    ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
+    ctx.save(); ctx.rotate(a1);
+    for (let i = 0; i < 36; i++) { const ang = i / 36 * Math.PI * 2, long = i % 3 === 0; ctx.beginPath(); ctx.moveTo(Math.cos(ang) * 86 * s, Math.sin(ang) * 86 * s); ctx.lineTo(Math.cos(ang) * (long ? 78 : 82) * s, Math.sin(ang) * (long ? 78 : 82) * s); ctx.lineWidth = (long ? 2.2 : 1.2) * s; ctx.strokeStyle = c(0, long ? 0.9 : 0.45); ctx.shadowBlur = 6 * s; ctx.shadowColor = c(0, 1); ctx.stroke(); }
+    arc(92 * s, 0, Math.PI * 2, 1 * s, 0.35, 0);
+    ctx.restore();
+    ctx.save(); ctx.rotate(a2);
+    for (let i = 0; i < 5; i++) arc(66 * s, i / 5 * Math.PI * 2, Math.PI * 2 / 5 - 0.32, 5 * s, 0.85, 12 * s);
+    ctx.restore();
+    ctx.save(); ctx.rotate(a3);
+    arc(48 * s, 0, Math.PI * 0.9, 2.5 * s, 0.95, 10 * s); arc(48 * s, Math.PI, Math.PI * 0.6, 2.5 * s, 0.6, 10 * s);
+    for (let i = 0; i < 3; i++) { const ang = i / 3 * Math.PI * 2; ctx.beginPath(); ctx.arc(Math.cos(ang) * 56 * s, Math.sin(ang) * 56 * s, 2.4 * s, 0, Math.PI * 2); ctx.fillStyle = c(0, 1); ctx.shadowBlur = 10 * s; ctx.shadowColor = c(0, 1); ctx.fill(); }
+    ctx.restore();
+    ctx.save(); ctx.rotate(-a1 * 2);
+    ctx.beginPath(); for (let i = 0; i < 6; i++) { const ang = i / 6 * Math.PI * 2; ctx[i ? "lineTo" : "moveTo"](Math.cos(ang) * 32 * s, Math.sin(ang) * 32 * s); } ctx.closePath();
+    ctx.lineWidth = 1.5 * s; ctx.strokeStyle = c(0, 0.7); ctx.shadowBlur = 8 * s; ctx.stroke();
+    ctx.restore();
+    const core = ctx.createRadialGradient(0, 0, 0, 0, 0, 26 * s);
+    core.addColorStop(0, `rgba(255,255,255,${0.95})`); core.addColorStop(0.35, c(0, 0.95 * pulse + flashT * 0.3)); core.addColorStop(1, c(0, 0));
+    ctx.shadowBlur = 30 * s * pulse; ctx.shadowColor = c(0, 1); ctx.fillStyle = core;
+    ctx.beginPath(); ctx.arc(0, 0, (22 + 3 * pulse + flashT * 6) * s, 0, Math.PI * 2); ctx.fill();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+  return { set(m) { mode = COL[m] ? m : "idle"; }, flash() { flashT = 1; } };
+}
+
+const core = makeCore($("coreCv"));
+$("coreCv").addEventListener("click", () => { armAudio(); core.flash(); showTab("vChat"); if (!$("micBtn").hidden) $("micBtn").click(); else $("q").focus(); });
+
+/* ---------- start ---------- */
+fillSettings(); renderBrief();
+if (lsGet("jm-imported") === "1") { lsSet("jm-imported", null); $("gClient").value = gClientId(); say("sys", "Settings copied from your laptop. " + (apiKey ? "Jarvis is ready." : "Add your API key in Settings.")); }
+showTab(lsGet("jm-tab") || "vChat");
+if (!apiKey && lsGet("jm-tab") !== "vSettings") say("sys", "Welcome. Add your Claude or OpenAI API key in Settings to wake me up.");
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { tick(); briefCheck(); if (!$("vAgenda").hidden) loadAgenda(); } });
+setTimeout(briefCheck, 1500);
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
